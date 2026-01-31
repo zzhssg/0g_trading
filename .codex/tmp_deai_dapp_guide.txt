@@ -1,0 +1,426 @@
+Build Your First DeAI Dapp 完整指南
+环境配置步骤
+Step 1：安装 AI 开发⼯具
+选择⼀个：
+Cursor：VS Code fork，AI 原⽣编辑器
+Claude Code：命令⾏ AI 助⼿
+Antigravity：0G 官⽅推荐
+Step 2：配置 AI Context： https://docs.0g.ai/ai-context
+将 0G ⽂档加⼊项⽬上下⽂： https://docs.0g.ai/ai-context
+或在 Cursor 中添加：
+Step 3：配置 0G 开发环境：
+# 创建 AI Context ⽂件
+mkdir -p .claude
+curl -o .claude/0g-context.md https://docs.0g.ai/ai-context
+// .cursor/settings.json
+{
+"ai.contextFiles": [
+"https://docs.0g.ai/ai-context"
+]
+}
+# 创建 .env ⽂件
+cat > .env << 'EOF'
+# 0G Galileo 测试⽹配置
+RPC_URL=https://evmrpc-testnet.0g.ai
+CHAIN_ID=16602
+INDEXER_RPC=https://indexer-storage-testnet-turbo.0g.ai
+PRIVATE_KEY=你的私钥
+# 可选：主⽹配置
+
+-- 1 of 14 --
+
+模版 	语⾔/框架 	核⼼功能 	适⽤场景
+0g-storage-ts-starter-kit 	TypeScript + Express 	存储 API 	Node.js 后端
+0g-storage-web-starter-kit 	React + Next.js 	存储前端 	Web DApp
+0g-storage-go-starter-kit 	Go + Gin 	存储 API 	⾼性能后端
+0g-compute-ts-starter-kit 	TypeScript + Express 	AI 推理 + ⽀付 	AI 应⽤
+Step 4：获取测试代币
+访问 https://faucet.0g.ai 获取测试⽹代币。
+四、0G 模版快速启动
+官⽅ Starter Kit ⼀览
+推荐：TypeScript Storage Starter Kit
+模版功能详解
+# 可选：主⽹配置
+# RPC_URL=https://evmrpc.0g.ai
+# CHAIN_ID=16661
+EOF
+# 克隆模版
+git clone https://github.com/0gfoundation/0g-storage-ts-starter-kit
+cd 0g-storage-ts-starter-kit
+# 安装依赖
+pnpm install
+# 配置环境变量
+cp .env.example .env
+# 编辑 .env，填⼊你的 PRIVATE_KEY
+# 运⾏测试
+pnpm test
+
+-- 2 of 14 --
+
+配置项 	值
+Chain ID 	16602
+RPC Endpoint 	https://evmrpc-testnet.0g.ai
+Storage 起始区块 	326165
+Faucet 	https://faucet.0g.ai
+模版功能详解
+1. Storage TypeScript Starter Kit
+Express REST API + Swagger ⽂档
+⽂件上传/下载
+@0glabs/0g-ts-sdk v0.3.3 集成
+⽀持 Testnet 和 Mainnet
+2. Storage Web Starter Kit
+Next.js + React + TailwindCSS
+钱包集成（MetaMask 等）
+拖拽上传组件
+费⽤估算与显示
+模块化 Hooks： useUpload 、 useDownload 、 useFees
+3. Compute TypeScript Starter Kit
+7+ AI 模型⽀持（DeepSeek V3、GPT-OSS、Gemma、Whisper、Flux）
+⾃动⽀付处理（微⽀付）
+TEE 可信执⾏环境验证
+账本管理（存款、退款、资⾦转移）
+五、0G 基础设施集成指南
+⽹络配置
+Galileo 测试⽹（推荐开发）
+
+-- 3 of 14 --
+
+Explorer 	https://chainscan-galileo.0g.ai
+配置项 	值
+Chain ID 	16661
+RPC Endpoint 	https://evmrpc.0g.ai
+Storage 起始区块 	2,387,557
+Explorer 	https://chainscan.0g.ai
+Aristotle 主⽹
+5.1 0G Storage SDK
+安装
+⽂件上传示例
+# TypeScript
+npm install @0glabs/0g-ts-sdk ethers
+# Python
+pip install 0g-storage-client
+# Go
+go get github.com/0gfoundation/0g-storage-client
+import { ZgFile, Indexer } from '@0glabs/0g-ts-sdk';
+import { ethers } from 'ethers';
+// 初始化
+const provider = new ethers.JsonRpcProvider('https://evmrpc-testnet.0g.ai');
+const signer = new ethers.Wallet(process.env.PRIVATE_KEY!, provider);
+const indexer = new Indexer('https://indexer-storage-testnet-turbo.0g.ai');
+// 创建⽂件并获取 Merkle 树
+const file = await ZgFile.fromFilePath('/path/to/file');
+const [tree, err] = await file.merkleTree();
+
+-- 4 of 14 --
+
+⽂件下载示例
+KV 存储示例
+5.2 0G Storage CLI
+安装
+上传⽂件
+const [tree, err] = await file.merkleTree();
+console.log("Root Hash:", tree.rootHash());
+// 上传⽂件
+const [tx, uploadErr] = await indexer.upload(
+file,
+'https://evmrpc-testnet.0g.ai',
+signer
+);
+await file.close();
+const err = await indexer.download(
+'<root_hash>',
+'/output/path',
+true 	// 验证数据
+);
+const [nodes, err] = await indexer.selectNodes(1);
+const batcher = new Batcher(1, nodes, flowContract, evmRpc);
+batcher.streamDataBuilder.set("0x...", key, value);
+const [tx, batchErr] = await batcher.exec();
+git clone https://github.com/0glabs/0g-storage-client.git
+cd 0g-storage-client
+go build
+./0g-storage-client upload \
+--url https://evmrpc-testnet.0g.ai \
+--key $PRIVATE_KEY \
+--indexer https://indexer-storage-testnet-turbo.0g.ai \
+
+-- 5 of 14 --
+
+下载⽂件
+5.3 0G Compute（AI 推理）
+安装
+Web UI 快速启动
+SDK 集成示例
+--indexer https://indexer-storage-testnet-turbo.0g.ai \
+--file ./my-file.txt
+./0g-storage-client download \
+--indexer https://indexer-storage-testnet-turbo.0g.ai \
+--root <merkle-root-hash> \
+--file ./output.txt
+pnpm add @0glabs/0g-serving-broker
+# 全局安装 CLI
+pnpm add @0glabs/0g-serving-broker -g
+0g-compute-cli ui start-web
+# 访问 http://localhost:3090
+import { createZGComputeNetworkBroker } from '@0glabs/0g-serving-broker';
+// 初始化
+const broker = await createZGComputeNetworkBroker(signer);
+// 发现服务
+const services = await broker.inference.listServices();
+// 确认服务提供者
+await broker.inference.acknowledgeProviderSigner(providerAddress);
+// 获取请求头（⽤于 OpenAI 兼容 API）
+const headers = await broker.inference.getRequestHeaders(
+providerAddress,
+
+-- 6 of 14 --
+
+5.4 0G DA（数据可⽤性层）
+特性
+50 Gbps 吞吐量
+VRF 节点选择
+⽀持 OP Stack 和 Arbitrum Nitro 集成
+Rust SDK 安装
+六、0G Chain 智能合约部署
+为什么选择 0G Chain？
+性能优势：
+2,500+ TPS：⾼于以太坊主⽹
+低费⽤：仅为主⽹费⽤的⼀⼩部分
+亚秒级确认：1-2 秒区块时间
+EVM 兼容性：
+providerAddress,
+serviceName,
+content
+);
+// 发送推理请求（OpenAI 兼容）
+const response = await fetch(serviceUrl, {
+method: 'POST',
+headers: { ...headers, 'Content-Type': 'application/json' },
+body: JSON.stringify({
+messages: [{ role: 'user', content: 'Hello!' }]
+})
+});
+// 验证响应
+const isValid = await broker.inference.processResponse(chatId);
+cargo add 0g-da-rust-sdk
+
+-- 7 of 14 --
+
+EVM 兼容性：
+⽀持 Pectra & Cancun-Deneb
+使⽤熟悉的⼯具：Hardhat、Foundry、Remix
+现有以太坊代码⽆需修改即可运⾏
+Step 1：准备智能合约
+Step 2：编译合约
+重要：使⽤ --evm-version cancun 确保兼容性。
+Hardhat 配置：
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+contract MyToken {
+mapping(address => uint256) public balances;
+uint256 public totalSupply;
+constructor(uint256 _initialSupply) {
+totalSupply = _initialSupply;
+balances[msg.sender] = _initialSupply;
+}
+function transfer(address to, uint256 amount) public returns (bool) {
+require(balances[msg.sender] >= amount, "Insufficient balance");
+balances[msg.sender] -= amount;
+balances[to] += amount;
+return true;
+}
+}
+// hardhat.config.js
+module.exports = {
+solidity: {
+version: "0.8.19",
+settings: {
+evmVersion: "cancun",
+optimizer: {
+enabled: true,
+
+-- 8 of 14 --
+
+Foundry 配置：
+Step 3：部署合约
+Hardhat 部署：
+Foundry 部署：
+enabled: true,
+runs: 200,
+},
+},
+},
+networks: {
+"0g-testnet": {
+url: "https://evmrpc-testnet.0g.ai",
+chainId: 16602,
+accounts: [process.env.PRIVATE_KEY]
+},
+"0g-mainnet": {
+url: "https://evmrpc.0g.ai",
+chainId: 16661,
+accounts: [process.env.PRIVATE_KEY]
+}
+}
+};
+# foundry.toml
+[profile.default]
+evm_version = "cancun"
+[rpc_endpoints]
+0g_testnet = "https://evmrpc-testnet.0g.ai"
+0g_mainnet = "https://evmrpc.0g.ai"
+npx hardhat run scripts/deploy.js --network 0g-testnet
+
+-- 9 of 14 --
+
+Step 4：验证合约
+Hardhat 验证：
+Foundry 验证：
+故障排除
+交易失败 "invalid opcode"？
+确保使⽤ --evm-version cancun
+或降级 Solidity 版本（如从 0.8.26 到 0.8.19）
+⽆法连接 RPC？
+尝试 QuikNode 或 ThirdWeb 的替代端点
+七、模块化 DeAI Dapp 架构
+架构图
+forge create --rpc-url https://evmrpc-testnet.0g.ai \
+--private-key $PRIVATE_KEY \
+--evm-version cancun \
+src/MyToken.sol:MyToken \
+--constructor-args 1000000
+npx hardhat verify DEPLOYED_CONTRACT_ADDRESS --network 0g-testnet
+forge verify-contract \
+--chain-id 16602 \
+--num-of-optimizations 200 \
+--verifier custom \
+--verifier-api-key "PLACEHOLDER" \
+--compiler-version v0.8.19 \
+<CONTRACT_ADDRESS> \
+src/MyToken.sol:MyToken \
+--verifier-url https://chainscan-galileo.0g.ai/open/api
+┌─────────────────────────────────────────────────────────────┐
+
+-- 10 of 14 --
+
+推荐项⽬结构
+┌─────────────────────────────────────────────────────────────┐
+│ 	DeAI Dapp Frontend 	│
+│ 	(Next.js / React + Viem) 	│
+└──────────────┬──────────────┬───────────────┬───────────────┘
+│ 	│ 	│
+┌───────────▼───────────┐ 	│ 	┌───────────▼───────────┐
+│ 	0G Chain Module 	│ 	│ 	│ 	0G Compute Module 	│
+│ ───────────────────── │ 	│ 	│ ───────────────────── │
+│ • Smart Contracts 	│ 	│ 	│ • AI Inference 	│
+│ • Token/NFT Logic 	│ 	│ 	│ • Fine-tuning 	│
+│ • Hardhat/Foundry 	│ 	│ 	│ • 0g-serving-broker 	│
+└───────────────────────┘ 	│ 	└───────────────────────┘
+│
+┌───────────▼───────────┐ 	│ 	┌───────────────────────┐
+│ 	0G Storage Module 	│ 	│ 	│ 	0G DA Module 	│
+│ ───────────────────── │ 	│ 	│ ───────────────────── │
+│ • 0g-ts-sdk 	│◄─┼─►│ • Rollup DA 	│
+│ • File Upload/DL 	│ 	│ 	│ • 0g-da-rust-sdk 	│
+│ • KV Store 	│ 	│ 	│ • OP Stack 集成 	│
+└───────────────────────┘ 	│ 	└───────────────────────┘
+│
+┌───────────────▼───────────────┐
+│ 	Shared Utils 	│
+│ ───────────────────────────── │
+│ • ethers.js 	│
+│ • Wallet Connect 	│
+│ • RPC Management 	│
+└───────────────────────────────┘
+deai-dapp/
+├── packages/
+│ 	├── chain/ 	# 智能合约 (Hardhat/Foundry)
+│ 	│ 	├── contracts/
+│ 	│ 	├── scripts/
+│ 	│ 	└── hardhat.config.js
+│ 	│
+│ 	├── storage/ 	# 0G Storage SDK 封装
+│ 	│ 	├── src/
+│ 	│ 	│ 	├── upload.ts
+│ 	│ 	│ 	├── download.ts
+
+-- 11 of 14 --
+
+模块 	职责 	主要依赖
+chain 	智能合约开发、部署、交互 	Hardhat/Foundry、ethers
+storage 	⽂件上传/下载、KV 存储 	@0glabs/0g-ts-sdk
+compute 	AI 推理请求、⽀付管理 	@0glabs/0g-serving-broker
+da 	数据可⽤性、Rollup 集成 	0g-da-rust-sdk
+web 	⽤户界⾯、钱包连接 	Next.js、wagmi、viem
+各模块职责
+⼋、资源与参考
+│ 	│ 	│ 	└── kv.ts
+│ 	│ 	└── package.json
+│ 	│
+│ 	├── compute/ 	# 0G Compute SDK 封装
+│ 	│ 	├── src/
+│ 	│ 	│ 	├── inference.ts
+│ 	│ 	│ 	└── broker.ts
+│ 	│ 	└── package.json
+│ 	│
+│ 	├── da/ 	# 0G DA 集成 (可选)
+│ 	│ 	└── ...
+│ 	│
+│ 	└── web/ 	# 前端应⽤
+│ 	├── app/
+│ 	├── components/
+│ 	├── hooks/
+│ 	│ 	├── useUpload.ts
+│ 	│ 	├── useDownload.ts
+│ 	│ 	└── useFees.ts
+│ 	└── package.json
+│
+├── .env.example
+├── package.json
+└── pnpm-workspace.yaml
+
+-- 12 of 14 --
+
+资源 	链接
+官⽅⽂档 	https://docs.0g.ai
+Builder Hub 	https://build.0g.ai
+SDKs 列表 	https://build.0g.ai/sdks
+Faucet 	https://faucet.0g.ai
+Explorer (Testnet) 	https://chainscan-galileo.0g.ai
+Explorer (Mainnet) 	https://chainscan.0g.ai
+资源 	链接
+TypeScript SDK 	https://github.com/0glabs/0g-ts-sdk
+Go Storage Client 	https://github.com/0glabs/0g-storage-client
+Serving Broker 	https://www.npmjs.com/package/@0glabs/0g-serving-broker
+部署脚本 	https://github.com/0glabs/0g-deployment-scripts
+模版 	链接
+Storage TS 	https://github.com/0gfoundation/0g-storage-ts-starter-kit
+Storage Web 	https://github.com/0gfoundation/0g-storage-web-starter-kit
+Storage Go 	https://github.com/0gfoundation/0g-storage-go-starter-kit
+Compute TS 	https://github.com/0gfoundation/0g-compute-ts-starter-kit
+官⽅链接
+SDK & ⼯具
+Starter Kits
+0G 基础设施概览
+
+-- 13 of 14 --
+
+组件 	功能
+0G Storage 	去中⼼化数据存储，⽐ AWS 成本低 95%，⽀持即时检索
+0G Compute 	去中⼼化 AI 推理和训练，全球 GPU ⽹络，按使⽤付费
+0G Chain 	最快的模块化 AI L1 区块链，2,500+ TPS，EVM 兼容
+0G DA 	⽆限可扩展的数据可⽤性层，确保数据可访问和可验证
+iNFTs 	基于 ERC-7857 标准的智能 NFT，⽤于令牌化 AI Agent
+快速检查清单
+开始构建前，确保：
+安装 Node.js 16+
+安装 AI 开发⼯具（Cursor/Claude Code）
+配置 0G Context ⽂件
+创建 .env 并填⼊私钥
+从 Faucet 获取测试代币
+克隆合适的 Starter Kit
+运⾏测试确认 SDK 连接正常
+Happy Building!
+
+-- 14 of 14 --
+

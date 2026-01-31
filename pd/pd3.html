@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>0G Arena Pro | Verifiable Backtesting Laboratory</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg: #06080f; --panel: #0d111a; --accent: #3b82f6; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); color: #f8fafc; overflow: hidden; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .glass { background: rgba(13, 17, 26, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.05); }
+        .sample-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; border: 1px solid rgba(255,255,255,0.05); }
+        .sample-card.active { border-color: var(--accent); background: rgba(59, 130, 246, 0.1); box-shadow: 0 0 20px rgba(59, 130, 246, 0.15); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="flex h-screen w-screen overflow-hidden">
+
+    <aside class="w-64 h-full flex flex-col border-r border-white/5 bg-[#080a0f] z-50">
+        <div class="p-6">
+            <div class="flex items-center gap-3 mb-10">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold shadow-lg">0G</div>
+                <span class="font-bold tracking-tight uppercase text-sm">Arena Pro</span>
+            </div>
+            <nav class="space-y-1">
+                <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-600/10 text-blue-500 text-sm font-bold">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>竞技场大盘
+                </a>
+                <a href="#" class="flex items-center gap-3 px-4 py-3 rounded-xl text-gray-500 hover:bg-white/5 text-sm font-medium transition-all">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>策略工厂
+                </a>
+            </nav>
+        </div>
+        <div class="mt-auto p-6 border-t border-white/5">
+            <div class="flex items-center gap-2 mb-4 text-[10px] mono text-emerald-500">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-sm"></span> Galileo Testnet
+            </div>
+            <div class="text-[10px] text-gray-600 mono break-all">ADDR: 0x71C...a3E4</div>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-full overflow-hidden bg-[#06080f]">
+        <header class="h-20 flex justify-between items-center px-8 border-b border-white/5 bg-[#0d111a]/50">
+            <div>
+                <h2 class="text-xl font-bold">策略回测实验室</h2>
+                <p class="text-[10px] text-gray-500 font-medium uppercase tracking-widest">Scientific Reproducibility Environment</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="flex bg-black/40 p-1 rounded-xl border border-white/5">
+                    <button class="px-4 py-1.5 rounded-lg bg-blue-600 text-[10px] font-bold">1H</button>
+                    <button class="px-4 py-1.5 rounded-lg text-gray-500 text-[10px] font-bold">5M</button>
+                </div>
+                <button class="px-5 py-2 rounded-full bg-white/5 border border-white/10 text-xs font-bold hover:bg-white/10 transition-all">0x0172...BB75</button>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-8 no-scrollbar">
+            <div class="grid grid-cols-12 gap-6 mb-8">
+                <div class="col-span-3 space-y-3">
+                    <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">市场样本库 (0G Storage)</h3>
+                    
+                    <div onclick="selectSample('btc-stable', this)" class="sample-card active glass p-4 rounded-2xl">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="px-2 py-0.5 rounded bg-orange-500/20 text-orange-500 text-[9px] font-bold">BTC/USDT</span>
+                            <span class="text-[10px] mono text-gray-500">0x5a84...</span>
+                        </div>
+                        <p class="text-sm font-bold">#S-01 稳健增长样本</p>
+                        <p class="text-[10px] text-gray-500 mt-1">1月1日 - 1月7日 (5Min)</p>
+                    </div>
+
+                    <div onclick="selectSample('eth-volatile', this)" class="sample-card glass p-4 rounded-2xl opacity-60 hover:opacity-100">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-500 text-[9px] font-bold">ETH/USDT</span>
+                            <span class="text-[10px] mono text-gray-500">0x3b12...</span>
+                        </div>
+                        <p class="text-sm font-bold">#V-02 高波动洗盘样本</p>
+                        <p class="text-[10px] text-gray-500 mt-1">2月12日 - 2月18日 (5Min)</p>
+                    </div>
+
+                    <div onclick="selectSample('sol-crash', this)" class="sample-card glass p-4 rounded-2xl opacity-60 hover:opacity-100">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-500 text-[9px] font-bold">SOL/USDT</span>
+                            <span class="text-[10px] mono text-gray-500">0xc9a1...</span>
+                        </div>
+                        <p class="text-sm font-bold">#C-03 极端插针样本</p>
+                        <p class="text-[10px] text-gray-500 mt-1">3月05日 - 3月08日 (1Hr)</p>
+                    </div>
+                </div>
+
+                <div class="col-span-9 glass rounded-3xl p-6 relative overflow-hidden flex flex-col">
+                    <div class="flex justify-between items-center mb-4">
+                        <div class="flex items-center gap-4">
+                            <div id="chart-title" class="text-lg font-bold">BTC/USDT #S-01</div>
+                            <div class="text-emerald-500 font-mono text-sm tracking-tighter">● LIVE BACKTESTING</div>
+                        </div>
+                        <div class="text-[10px] mono text-gray-500">DA Root: <span id="current-da-hash">0xda584...6072</span></div>
+                    </div>
+                    <div id="tv-chart" class="flex-1 w-full min-h-[400px]"></div>
+                </div>
+            </div>
+
+            <div class="glass rounded-3xl overflow-hidden shadow-2xl">
+                <div class="px-8 py-6 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
+                    <div>
+                        <h4 class="font-bold">当前样本回测排名</h4>
+                        <p class="text-[10px] text-gray-500 uppercase mt-1">Real-time computation based on selected market pointer</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span id="re-calculating" class="hidden text-[10px] text-blue-400 font-bold animate-pulse italic">RE-CALCULATING...</span>
+                        <button class="text-[10px] bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg font-bold transition-all">重新验证全部策略</button>
+                    </div>
+                </div>
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="text-[10px] text-gray-500 uppercase font-bold border-b border-white/5">
+                            <th class="px-8 py-4">Rank</th>
+                            <th class="px-8 py-4">Strategy (INFT)</th>
+                            <th class="px-8 py-4">Current PnL</th>
+                            <th class="px-8 py-4">Max Drawdown</th>
+                            <th class="px-8 py-4">Execution Proof</th>
+                            <th class="px-8 py-4 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-body" class="divide-y divide-white/5 text-sm">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // 1. 初始化图表
+        const chart = LightweightCharts.createChart(document.getElementById('tv-chart'), {
+            layout: { backgroundColor: 'transparent', textColor: '#64748b' },
+            grid: { vertLines: { color: 'rgba(255,255,255,0.03)' }, horzLines: { color: 'rgba(255,255,255,0.03)' } },
+            crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+            priceScale: { borderColor: 'rgba(255,255,255,0.1)' },
+            timeScale: { borderColor: 'rgba(255,255,255,0.1)' },
+        });
+        const candleSeries = chart.addCandlestickSeries({
+            upColor: '#10b981', downColor: '#ef4444', borderVisible: false,
+            wickUpColor: '#10b981', wickDownColor: '#ef4444'
+        });
+
+        // 2. 模拟市场数据与策略回测结果
+        const marketSamples = {
+            'btc-stable': {
+                name: 'BTC/USDT #S-01',
+                hash: '0xda584...6072',
+                data: [
+                    { time: '2023-01-01', open: 16500, high: 16700, low: 16400, close: 16650 },
+                    { time: '2023-01-02', open: 16650, high: 16900, low: 16600, close: 16850 },
+                    { time: '2023-01-03', open: 16850, high: 17200, low: 16800, close: 17100 },
+                    { time: '2023-01-04', open: 17100, high: 17150, low: 16950, close: 17000 },
+                    { time: '2023-01-05', open: 17000, high: 17400, low: 17000, close: 17350 }
+                ],
+                ranking: [
+                    { name: 'Trend-Master-v2', pnl: '+18.42%', mdd: '2.1%', proof: '0xc89...bc6', color: 'text-emerald-400' },
+                    { name: 'MA-Cross-Bot', pnl: '+12.10%', mdd: '1.5%', proof: '0x71a...e12', color: 'text-emerald-400' },
+                    { name: 'Grid-Alpha-9', pnl: '-2.45%', mdd: '5.8%', proof: '0x992...f2a', color: 'text-red-400' }
+                ]
+            },
+            'eth-volatile': {
+                name: 'ETH/USDT #V-02',
+                hash: '0x3b12...e812',
+                data: [
+                    { time: '2023-01-01', open: 1200, high: 1350, low: 1150, close: 1280 },
+                    { time: '2023-01-02', open: 1280, high: 1400, low: 1200, close: 1220 },
+                    { time: '2023-01-03', open: 1220, high: 1300, low: 1100, close: 1150 },
+                    { time: '2023-01-04', open: 1150, high: 1450, low: 1100, close: 1420 },
+                    { time: '2023-01-05', open: 1420, high: 1440, low: 1300, close: 1320 }
+                ],
+                ranking: [
+                    { name: 'Grid-Alpha-9', pnl: '+45.12%', mdd: '12.4%', proof: '0x992...f2a', color: 'text-emerald-400' },
+                    { name: 'Trend-Master-v2', pnl: '+5.21%', mdd: '8.2%', proof: '0xc89...bc6', color: 'text-emerald-400' },
+                    { name: 'MA-Cross-Bot', pnl: '-14.30%', mdd: '22.1%', proof: '0x71a...e12', color: 'text-red-400' }
+                ]
+            },
+            'sol-crash': {
+                name: 'SOL/USDT #C-03',
+                hash: '0xc9a1...bb91',
+                data: [
+                    { time: '2023-01-01', open: 22, high: 24, low: 21, close: 23 },
+                    { time: '2023-01-02', open: 23, high: 23.5, low: 15, close: 16 },
+                    { time: '2023-01-03', open: 16, high: 17, low: 12, close: 13 },
+                    { time: '2023-01-04', open: 13, high: 14, low: 13, close: 13.5 },
+                    { time: '2023-01-05', open: 13.5, high: 15, low: 13.5, close: 14.8 }
+                ],
+                ranking: [
+                    { name: 'Short-Legend-AI', pnl: '+102.5%', mdd: '4.2%', proof: '0xf21...a22', color: 'text-emerald-400' },
+                    { name: 'Grid-Alpha-9', pnl: '-42.10%', mdd: '65.1%', proof: '0x992...f2a', color: 'text-red-400' },
+                    { name: 'MA-Cross-Bot', pnl: '-88.21%', mdd: '92.4%', proof: '0x71a...e12', color: 'text-red-400' }
+                ]
+            }
+        };
+
+        // 3. 核心交互函数：切换样本并刷新回测
+        function selectSample(sampleKey, element) {
+            // UI 切换
+            document.querySelectorAll('.sample-card').forEach(el => el.classList.remove('active', 'opacity-100'));
+            element.classList.add('active', 'opacity-100');
+            
+            // 展示“正在重新计算”动画 (模拟回测过程)
+            const calcLabel = document.getElementById('re-calculating');
+            calcLabel.classList.remove('hidden');
+
+            const sample = marketSamples[sampleKey];
+            
+            // 更新标题与 Hash
+            document.getElementById('chart-title').innerText = sample.name;
+            document.getElementById('current-da-hash').innerText = sample.hash;
+
+            // 刷新图表
+            candleSeries.setData(sample.data);
+            chart.timeScale().fitContent();
+
+            // 模拟延迟后更新排行榜 (KR2)
+            setTimeout(() => {
+                updateLeaderboard(sample.ranking);
+                calcLabel.classList.add('hidden');
+            }, 800);
+        }
+
+        function updateLeaderboard(ranking) {
+            const body = document.getElementById('leaderboard-body');
+            body.innerHTML = '';
+            
+            ranking.forEach((item, index) => {
+                const row = `
+                    <tr class="hover:bg-white/5 transition-colors group">
+                        <td class="px-8 py-5 font-bold italic ${index === 0 ? 'text-yellow-500' : 'text-gray-500'}">#${index + 1}</td>
+                        <td class="px-8 py-5 font-bold">${item.name}</td>
+                        <td class="px-8 py-5 font-mono font-bold ${item.color}">${item.pnl}</td>
+                        <td class="px-8 py-5 font-mono text-gray-400">${item.mdd}</td>
+                        <td class="px-8 py-5">
+                            <span class="px-2 py-1 rounded bg-blue-500/10 text-blue-400 text-[10px] mono border border-blue-500/20">${item.proof}</span>
+                        </td>
+                        <td class="px-8 py-5 text-right">
+                            <button class="text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-white transition-colors">查看计算日志</button>
+                        </td>
+                    </tr>
+                `;
+                body.innerHTML += row;
+            });
+        }
+
+        // 初始化加载第一个样本
+        selectSample('btc-stable', document.querySelector('.sample-card'));
+    </script>
+</body>
+</html>
