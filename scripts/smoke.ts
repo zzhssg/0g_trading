@@ -9,17 +9,33 @@ async function main() {
   const strategyNFTAddress = "0x0E039e652b8E5CAb7a59b91e8A527C41750C8e9b";
   const tradingArenaAddress = "0x3a0Ac6C236e4fADd088Ec187563a78707Ab7B7C8";
 
-  const strategyNFT = await ethers.getContractAt("StrategyNFT", strategyNFTAddress, deployer);
-  const tradingArena = await ethers.getContractAt("TradingArena", tradingArenaAddress, deployer);
+  const strategyNFT = await ethers.getContractAt(
+    "StrategyNFT",
+    strategyNFTAddress,
+    deployer
+  );
+  const tradingArena = await ethers.getContractAt(
+    "TradingArena",
+    tradingArenaAddress,
+    deployer
+  );
 
   console.log("Signer:", deployer.address);
   console.log("StrategyNFT:", strategyNFTAddress);
   console.log("TradingArena:", tradingArenaAddress);
 
-  const marketDataHash = ethers.keccak256(
+  const marketDataRoot = ethers.keccak256(
     ethers.toUtf8Bytes("demo-market-data-2026-01-31")
   );
-  const startTx = await tradingArena.startNewRound(marketDataHash);
+  const datasetVersionHash = ethers.keccak256(ethers.toUtf8Bytes("v1"));
+  const evalWindowHash = ethers.keccak256(
+    ethers.toUtf8Bytes("2024-01-01T00:00:00Z~2024-01-07T00:00:00Z")
+  );
+  const startTx = await tradingArena.startNewRound(
+    marketDataRoot,
+    datasetVersionHash,
+    evalWindowHash
+  );
   await startTx.wait();
   const roundId = await tradingArena.currentRound();
   console.log("Started round:", roundId.toString());
@@ -81,6 +97,7 @@ async function main() {
     1245,
     12,
     7,
+    ethers.keccak256(ethers.toUtf8Bytes("demo-backtest-log-root")),
     ethers.keccak256(ethers.toUtf8Bytes("demo-execution-log"))
   );
   await submitTx.wait();

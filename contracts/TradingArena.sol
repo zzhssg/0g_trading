@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "./StrategyNFT.sol";
 
-contract TradingArena {
+contract TradingArena is Ownable {
     StrategyNFT public strategyNFT;
 
     struct TradingResult {
@@ -11,12 +12,13 @@ contract TradingArena {
         int256 pnl;
         uint256 totalTrades;
         uint256 winningTrades;
+        bytes32 backtestLogRoot;
         bytes32 executionLogHash;
         bytes32 codeHash;
         bytes32 paramsHash;
         bytes32 datasetVersionHash;
         bytes32 evalWindowHash;
-        bytes32 marketDataHash;
+        bytes32 marketDataRoot;
         uint256 timestamp;
         uint256 roundId;
     }
@@ -24,7 +26,9 @@ contract TradingArena {
     struct Round {
         uint256 startTime;
         uint256 endTime;
-        bytes32 marketDataHash;
+        bytes32 marketDataRoot;
+        bytes32 datasetVersionHash;
+        bytes32 evalWindowHash;
         bool finalized;
     }
 
@@ -35,24 +39,31 @@ contract TradingArena {
     mapping(uint256 => int256) public totalPnL;
     mapping(uint256 => mapping(uint256 => bool)) public resultSubmitted;
 
-    event RoundStarted(uint256 indexed roundId, bytes32 marketDataHash);
+    event RoundStarted(uint256 indexed roundId, bytes32 marketDataRoot);
     event ResultSubmitted(uint256 indexed roundId, uint256 indexed strategyId, int256 pnl);
     event RoundFinalized(uint256 indexed roundId);
 
-    constructor(address _strategyNFT) {
+    constructor(address _strategyNFT) Ownable(msg.sender) {
         strategyNFT = StrategyNFT(_strategyNFT);
     }
 
-    function startNewRound(bytes32 _marketDataHash) external {
+    function startNewRound(
+        bytes32 _marketDataRoot,
+        bytes32 _datasetVersionHash,
+        bytes32 _evalWindowHash
+    ) external onlyOwner {
+        require(_marketDataRoot != bytes32(0), "empty root");
         currentRound += 1;
         rounds[currentRound] = Round({
             startTime: block.timestamp,
             endTime: 0,
-            marketDataHash: _marketDataHash,
+            marketDataRoot: _marketDataRoot,
+            datasetVersionHash: _datasetVersionHash,
+            evalWindowHash: _evalWindowHash,
             finalized: false
         });
 
-        emit RoundStarted(currentRound, _marketDataHash);
+        emit RoundStarted(currentRound, _marketDataRoot);
     }
 
     /// @notice Submit backtest result for current round.
@@ -62,6 +73,7 @@ contract TradingArena {
         int256 _pnl,
         uint256 _totalTrades,
         uint256 _winningTrades,
+        bytes32 _backtestLogRoot,
         bytes32 _executionLogHash
     ) external {
         require(rounds[currentRound].startTime > 0, "No active round");
@@ -70,21 +82,20 @@ contract TradingArena {
         require(!resultSubmitted[currentRound][_strategyId], "Result already submitted");
 
         StrategyNFT.Strategy memory strategy = strategyNFT.getStrategy(_strategyId);
-        bytes32 datasetVersionHash = keccak256(bytes(strategy.datasetVersion));
-        bytes32 evalWindowHash = keccak256(bytes(strategy.evalWindow));
-        bytes32 marketDataHash = rounds[currentRound].marketDataHash;
+        Round memory round = rounds[currentRound];
 
         results[currentRound][_strategyId] = TradingResult({
             strategyId: _strategyId,
             pnl: _pnl,
             totalTrades: _totalTrades,
             winningTrades: _winningTrades,
+            backtestLogRoot: _backtestLogRoot,
             executionLogHash: _executionLogHash,
             codeHash: strategy.codeHash,
             paramsHash: strategy.paramsHash,
-            datasetVersionHash: datasetVersionHash,
-            evalWindowHash: evalWindowHash,
-            marketDataHash: marketDataHash,
+            datasetVersionHash: round.datasetVersionHash,
+            evalWindowHash: round.evalWindowHash,
+            marketDataRoot: round.marketDataRoot,
             timestamp: block.timestamp,
             roundId: currentRound
         });
@@ -96,7 +107,7 @@ contract TradingArena {
         emit ResultSubmitted(currentRound, _strategyId, _pnl);
     }
 
-    function finalizeRound() external {
+    function finalizeRound() external onlyOwner {
         require(rounds[currentRound].startTime > 0, "No active round");
         require(!rounds[currentRound].finalized, "Already finalized");
 
@@ -106,12 +117,12 @@ contract TradingArena {
         emit RoundFinalized(currentRound);
     }
 
-    function getLeaderboard(uint256 limit)
+    function getLeaderboardByRound(uint256 roundId, uint256 limit)
         external
         view
         returns (uint256[] memory strategyIds, int256[] memory pnls)
     {
-        uint256 total = strategyNFT.totalStrategies();
+        uint256 total = roundParticipants[roundId].length;
         if (total == 0 || limit == 0) {
             return (new uint256[](0), new int256[](0));
         }
@@ -121,8 +132,9 @@ contract TradingArena {
         uint256[] memory ids = new uint256[](total);
         int256[] memory scores = new int256[](total);
         for (uint256 i = 0; i < total; i++) {
-            ids[i] = i + 1;
-            scores[i] = totalPnL[i + 1];
+            uint256 strategyId = roundParticipants[roundId][i];
+            ids[i] = strategyId;
+            scores[i] = results[roundId][strategyId].pnl;
         }
 
         for (uint256 i = 0; i < total; i++) {
@@ -164,7 +176,7 @@ contract TradingArena {
         bytes32 _expectedParamsHash,
         bytes32 _expectedDatasetVersionHash,
         bytes32 _expectedEvalWindowHash,
-        bytes32 _expectedMarketDataHash
+        bytes32 _expectedMarketDataRoot
     ) external view returns (bool) {
         TradingResult memory result = results[_roundId][_strategyId];
         return
@@ -173,6 +185,6 @@ contract TradingArena {
             result.paramsHash == _expectedParamsHash &&
             result.datasetVersionHash == _expectedDatasetVersionHash &&
             result.evalWindowHash == _expectedEvalWindowHash &&
-            result.marketDataHash == _expectedMarketDataHash;
+            result.marketDataRoot == _expectedMarketDataRoot;
     }
 }
