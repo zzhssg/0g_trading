@@ -10,7 +10,7 @@ vi.mock("ethers", async () => {
   const actual = await vi.importActual<typeof import("ethers")>("ethers");
 
   const mockArena = {
-    getLeaderboard: vi.fn().mockResolvedValue([[1n], [1000n]]),
+    getLeaderboardByRound: vi.fn().mockResolvedValue([[1n], [1000n]]),
     currentRound: vi.fn().mockResolvedValue(1n),
     rounds: vi.fn().mockResolvedValue({
       startTime: 0n,

@@ -52,7 +52,7 @@ const STRATEGY_NFT_ABI = [
 ];
 
 const TRADING_ARENA_ABI = [
-  "function getLeaderboard(uint256 limit) external view returns (uint256[] strategyIds, int256[] pnls)",
+  "function getLeaderboardByRound(uint256 roundId,uint256 limit) external view returns (uint256[] strategyIds, int256[] pnls)",
   "function currentRound() external view returns (uint256)",
   "function rounds(uint256) external view returns (uint256 startTime,uint256 endTime,bytes32 marketDataHash,bool finalized)",
   "function getResult(uint256 roundId,uint256 strategyId) external view returns (tuple(uint256 strategyId,int256 pnl,uint256 totalTrades,uint256 winningTrades,bytes32 executionLogHash,bytes32 codeHash,bytes32 paramsHash,bytes32 datasetVersionHash,bytes32 evalWindowHash,bytes32 marketDataHash,uint256 timestamp,uint256 roundId))",
@@ -287,10 +287,14 @@ export default function Home() {
         readProvider
       );
 
-      const [strategyIds, pnls] = await arena.getLeaderboard(10);
       const roundId = await arena.currentRound();
       const roundIdText = roundId.toString();
       setCurrentRound(roundIdText);
+
+      const [strategyIds, pnls] =
+        roundId > 0n
+          ? await arena.getLeaderboardByRound(roundId, 10)
+          : [[], []];
 
       if (roundId > 0n) {
         try {
@@ -754,7 +758,7 @@ export default function Home() {
                     </span>
                   </div>
                   <p className="text-[10px] text-gray-500 uppercase font-bold mono mt-3">
-                    来源：TradingArena.getLeaderboard
+                  来源：TradingArena.getLeaderboardByRound
                   </p>
                   <div className="mt-6 flex flex-wrap items-center gap-3">
                     <span className="text-[10px] text-gray-500 uppercase font-bold">
@@ -856,7 +860,10 @@ export default function Home() {
                                 Token ID: {entry.tokenId}
                               </div>
                             </td>
-                            <td className="px-6 py-5 lg:px-8 text-right font-bold text-emerald-400 text-lg">
+                            <td
+                              className="px-6 py-5 lg:px-8 text-right font-bold text-emerald-400 text-lg"
+                              data-testid="leaderboard-pnl"
+                            >
                               {entry.pnl >= 0 ? "+" : ""}
                               {entry.pnl.toFixed(2)}%
                             </td>

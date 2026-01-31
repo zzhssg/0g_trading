@@ -64,14 +64,31 @@ node scripts/storage-upload.ts \
 - `StrategyNFT.registerStrategy`：`storageRoot = strategyCodeRoot`，`performancePointer = backtestLogRoot`
 - `TradingArena.submitResult`：`backtestLogRoot` + `backtestLogHash`
 
-## 6. 本地复算与对比
+## 6. 提交回测结果（脚本入口）
+
+```bash
+npm run --silent hardhat -- run scripts/submit-result.ts --network 0g-testnet -- \
+  --strategyId 1 \
+  --pnl 1245 \
+  --totalTrades 12 \
+  --winningTrades 7 \
+  --backtestLogRoot 0x... \
+  --executionLogHash 0x...
+```
+
+说明：
+- `pnl` 为链上 int256，建议用 **basis points**（100 = 1%），前端展示时会除以 100。
+- `backtestLogRoot` 来自 0G Storage 的回测日志 root（performancePointer）。
+- `executionLogHash` 为回测日志哈希（`backtestLogHash`）。
+
+## 7. 本地复算与对比
 
 前端“策略工厂”中：
 1) 填入 Strategy Code / Market Data JSON  
 2) 点击 **Local Verify (Run Strategy)**  
 3) 将本地 PnL 与链上排行榜对应策略的 PnL 对比  
 
-## 7. 验证通过标准
+## 8. 验证通过标准
 
 - 复算结果 == 链上 `backtestLogHash`（executionLogHash）
 - 轮次 `datasetVersionHash/evalWindowHash` 与本地窗口一致
