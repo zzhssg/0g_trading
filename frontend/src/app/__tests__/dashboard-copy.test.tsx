@@ -12,17 +12,20 @@ vi.mock("ethers", async () => {
   const mockArena = {
     getLeaderboardByRound: vi.fn().mockResolvedValue([[1n], [1000n]]),
     currentRound: vi.fn().mockResolvedValue(1n),
+    owner: vi.fn().mockResolvedValue("0xowner"),
     rounds: vi.fn().mockResolvedValue({
       startTime: 0n,
       endTime: 0n,
       marketDataHash: MARKET_HASH,
       finalized: false,
     }),
+    getResult: vi.fn().mockResolvedValue({ executionLogHash: `0x${"11".repeat(32)}` }),
   };
 
   const mockNft = {
     getStrategy: vi.fn().mockResolvedValue({ creator: "0xcreator" }),
     tokenURI: vi.fn().mockResolvedValue(""),
+    totalStrategies: vi.fn().mockResolvedValue(1n),
   };
 
   class MockContract {

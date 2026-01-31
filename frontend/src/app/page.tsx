@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ethers } from "ethers";
 import { buildStrategyRegistrationPayload } from "../lib/strategyPayload";
-import { uploadStrategyJson } from "../lib/ogStorage";
+import { uploadJsonContent, uploadStrategyJson } from "../lib/ogStorage";
+import {
+  buildKlinePreview,
+  computeDatasetHashes as computeMarketDatasetHashes,
+  parseMarketSample,
+  type MarketRow,
+  type MarketSample,
+} from "../lib/marketSample";
 import { computePnlFromLog, hashLog } from "../lib/verify";
 
 declare global {
@@ -14,13 +21,13 @@ declare global {
   }
 }
 
-type ViewId = "dashboard" | "factory" | "inspector";
+type ViewId = "dashboard" | "factory" | "inspector" | "admin";
 
 type LeaderboardEntry = {
   rank: number;
   name: string;
   tokenId: string;
-  pnl: number;
+  pnl: number | null;
   verification: string;
   status: string;
   creator: string;
@@ -34,9 +41,11 @@ type SummaryState = {
 };
 
 const STRATEGY_NFT_ADDRESS =
-  process.env.NEXT_PUBLIC_STRATEGY_NFT_ADDRESS ?? "";
+  process.env.NEXT_PUBLIC_STRATEGY_NFT_ADDRESS ||
+  "0xD2C5fDA21334c45f28ee992d4564C5CB29A06A7c";
 const TRADING_ARENA_ADDRESS =
-  process.env.NEXT_PUBLIC_TRADING_ARENA_ADDRESS ?? "";
+  process.env.NEXT_PUBLIC_TRADING_ARENA_ADDRESS ||
+  "0xbDffd2F1d2399c75aF9B171754c55Ca18EC7a1CB";
 const RPC_URL =
   process.env.NEXT_PUBLIC_RPC_URL ?? "https://evmrpc-testnet.0g.ai";
 
@@ -55,6 +64,7 @@ const TRADING_ARENA_ABI = [
   "function getLeaderboardByRound(uint256 roundId,uint256 limit) external view returns (uint256[] strategyIds, int256[] pnls)",
   "function currentRound() external view returns (uint256)",
   "function rounds(uint256) external view returns (uint256 startTime,uint256 endTime,bytes32 marketDataHash,bool finalized)",
+  "function owner() external view returns (address)",
   "function getResult(uint256 roundId,uint256 strategyId) external view returns (tuple(uint256 strategyId,int256 pnl,uint256 totalTrades,uint256 winningTrades,bytes32 executionLogHash,bytes32 codeHash,bytes32 paramsHash,bytes32 datasetVersionHash,bytes32 evalWindowHash,bytes32 marketDataHash,uint256 timestamp,uint256 roundId))",
 ];
 
@@ -62,11 +72,16 @@ const viewTitles: Record<ViewId, string> = {
   dashboard: "竞技场大盘",
   factory: "策略工厂",
   inspector: "验证详情",
+  admin: "市场样本库",
 };
 
 function shortenHash(value: string) {
   if (value.length <= 12) return value;
   return `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
+function isZeroHash(value: string) {
+  return /^0x0+$/.test(value);
 }
 
 function shortenAddress(value: string) {
@@ -113,6 +128,7 @@ export default function Home() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletError, setWalletError] = useState<string | null>(null);
   const [walletMenuOpen, setWalletMenuOpen] = useState(false);
+  const [arenaOwner, setArenaOwner] = useState<string | null>(null);
   const [mintStage, setMintStage] = useState<MintStage>("idle");
   const [mintResult, setMintResult] = useState<{
     tokenId: string;
@@ -156,6 +172,30 @@ export default function Home() {
     pnl: number;
     ok: boolean;
   }>(null);
+  const [marketFileName, setMarketFileName] = useState<string | null>(null);
+  const [marketSample, setMarketSample] = useState<MarketSample | null>(null);
+  const [marketSamplePreview, setMarketSamplePreview] = useState<MarketRow[]>([]);
+  const [marketSampleError, setMarketSampleError] = useState<string | null>(null);
+  const [marketUploadStatus, setMarketUploadStatus] = useState<
+    "idle" | "uploading" | "success" | "error"
+  >("idle");
+  const [marketUploadError, setMarketUploadError] = useState<string | null>(null);
+  const [marketDatasetHashes, setMarketDatasetHashes] = useState<{
+    datasetVersionHash: string;
+    evalWindowHash: string;
+  } | null>(null);
+  const [marketSubmitStatus, setMarketSubmitStatus] = useState<
+    "idle" | "submitting" | "success" | "error"
+  >("idle");
+  const [marketSubmitError, setMarketSubmitError] = useState<string | null>(null);
+  const [sampleLibraryRoot, setSampleLibraryRoot] = useState("");
+  const [sampleLibraryData, setSampleLibraryData] = useState<MarketSample | null>(
+    null
+  );
+  const [sampleLibraryPreview, setSampleLibraryPreview] = useState<MarketRow[]>([]);
+  const [sampleLibraryError, setSampleLibraryError] = useState<string | null>(
+    null
+  );
   const [strategyJson, setStrategyJson] = useState(
     `{
   "strategy": { "name": "rsi-threshold-v1", "version": "1.0.0", "author": "anon", "description": "RSI 阈值多空" },
@@ -191,6 +231,10 @@ export default function Home() {
   const readProvider = useMemo(() => new ethers.JsonRpcProvider(RPC_URL), []);
 
   const configMissing = !STRATEGY_NFT_ADDRESS || !TRADING_ARENA_ADDRESS;
+  const isOwner =
+    !!walletAddress &&
+    !!arenaOwner &&
+    walletAddress.toLowerCase() === arenaOwner.toLowerCase();
 
   useEffect(() => {
     const timeouts = timeoutsRef.current;
@@ -287,77 +331,138 @@ export default function Home() {
         readProvider
       );
 
-      const roundId = await arena.currentRound();
+      const [roundId, totalStrategies] = await Promise.all([
+        arena.currentRound(),
+        nft.totalStrategies(),
+      ]);
       const roundIdText = roundId.toString();
       setCurrentRound(roundIdText);
 
-      const [strategyIds, pnls] =
-        roundId > 0n
-          ? await arena.getLeaderboardByRound(roundId, 10)
-          : [[], []];
+      const totalCount = Number(totalStrategies);
+      const hasRound = roundId > 0n;
 
-      if (roundId > 0n) {
-        try {
-          const round = await arena.rounds(roundId);
-          const hash =
-            (round?.marketDataHash ?? round?.[2])?.toString?.() ??
-            (round?.marketDataHash ?? round?.[2]);
-          if (typeof hash === "string" && hash !== "0x") {
-            setMarketDataHash(hash);
-          } else {
-            setMarketDataHash(null);
-          }
-        } catch {
+      const [roundData, leaderboardData] = await Promise.all([
+        hasRound ? arena.rounds(roundId) : null,
+        hasRound && totalCount > 0
+          ? arena.getLeaderboardByRound(roundId, totalStrategies)
+          : [[], []],
+      ]);
+
+      let roundFinalized = false;
+      if (roundData) {
+        roundFinalized = Boolean(roundData?.finalized ?? roundData?.[3]);
+        const hash =
+          (roundData?.marketDataHash ?? roundData?.[2])?.toString?.() ??
+          (roundData?.marketDataHash ?? roundData?.[2]);
+        if (typeof hash === "string" && hash !== "0x") {
+          setMarketDataHash(hash);
+        } else {
           setMarketDataHash(null);
         }
       } else {
         setMarketDataHash(null);
       }
 
+      const [strategyIds, pnls] = leaderboardData as [bigint[], bigint[]];
+      const pnlMap = new Map<string, bigint>();
+      strategyIds.forEach((id, index) => {
+        pnlMap.set(id.toString(), pnls[index]);
+      });
+
+      if (!Number.isFinite(totalCount) || totalCount <= 0) {
+        setSummary({ totalPnl: 0, activeStrategies: 0 });
+        setLeaderboard([]);
+        return;
+      }
+
+      const allStrategyIds = Array.from(
+        { length: totalCount },
+        (_, index) => BigInt(index + 1)
+      );
+
       const entriesData = await Promise.all(
-        strategyIds.map(async (id: bigint, index: number) => {
+        allStrategyIds.map(async (id) => {
           const tokenId = id.toString();
           let creator = "--";
           let name = `Strategy #${tokenId}`;
 
-          try {
-            const strategy = await nft.getStrategy(id);
-            creator = strategy.creator as string;
-          } catch {
-            creator = "--";
+          const [strategyResult, tokenUriResult] = await Promise.all([
+            nft.getStrategy(id).catch(() => null),
+            nft.tokenURI(id).catch(() => null),
+          ]);
+
+          if (strategyResult && typeof strategyResult.creator === "string") {
+            creator = strategyResult.creator as string;
           }
 
-          try {
-            const tokenUri = await nft.tokenURI(id);
-            const decodedName = decodeTokenName(tokenUri);
+          if (typeof tokenUriResult === "string") {
+            const decodedName = decodeTokenName(tokenUriResult);
             if (decodedName) {
               name = decodedName;
             }
-          } catch {
-            name = `Strategy #${tokenId}`;
           }
 
-          const pnl = Number(pnls[index]) / 100;
-          const status = pnl > 0 ? "运行中" : pnl < 0 ? "待验证" : "已结束";
+          const pnlRaw = pnlMap.get(tokenId);
+          if (pnlRaw === undefined || !hasRound) {
+            return {
+              rank: 0,
+              name,
+              tokenId,
+              pnl: null,
+              verification: "--",
+              status: "未回测",
+              creator,
+            } as LeaderboardEntry;
+          }
+
+          let verification = "--";
+          try {
+            const result = await arena.getResult(roundId, id);
+            const executionLogHash =
+              (result?.executionLogHash ?? result?.[4])?.toString?.() ??
+              (result?.executionLogHash ?? result?.[4]);
+            if (
+              typeof executionLogHash === "string" &&
+              executionLogHash !== "0x" &&
+              !isZeroHash(executionLogHash)
+            ) {
+              verification = shortenHash(executionLogHash);
+            }
+          } catch {
+            verification = "--";
+          }
+
+          const pnl = Number(pnlRaw) / 100;
+          const status = roundFinalized ? "已结束" : "运行中";
 
           return {
-            rank: index + 1,
+            rank: 0,
             name,
             tokenId,
             pnl,
-            verification: shortenHash(ethers.keccak256(ethers.toUtf8Bytes(tokenId))),
+            verification,
             status,
             creator,
           } as LeaderboardEntry;
         })
       );
 
-      const sorted = [...entriesData].sort((a, b) => b.pnl - a.pnl);
+      const sorted = [...entriesData].sort((a, b) => {
+        const aMissing = a.pnl === null;
+        const bMissing = b.pnl === null;
+        if (aMissing && bMissing) {
+          return Number(a.tokenId) - Number(b.tokenId);
+        }
+        if (aMissing) return 1;
+        if (bMissing) return -1;
+        if (a.pnl !== b.pnl) return (b.pnl ?? 0) - (a.pnl ?? 0);
+        return Number(a.tokenId) - Number(b.tokenId);
+      });
       sorted.forEach((entry, index) => {
         entry.rank = index + 1;
       });
 
-      const totalPnl = sorted.reduce((sum, entry) => sum + entry.pnl, 0);
+      const totalPnl = sorted.reduce((sum, entry) => sum + (entry.pnl ?? 0), 0);
 
       setSummary({
         totalPnl,
@@ -381,6 +486,23 @@ export default function Home() {
 
     void loadLeaderboard();
   }, [configMissing, loadLeaderboard]);
+
+  useEffect(() => {
+    if (configMissing) {
+      setArenaOwner(null);
+      return;
+    }
+
+    const arena = new ethers.Contract(
+      TRADING_ARENA_ADDRESS,
+      TRADING_ARENA_ABI,
+      readProvider
+    );
+    arena
+      .owner()
+      .then((owner: string) => setArenaOwner(owner))
+      .catch(() => setArenaOwner(null));
+  }, [configMissing, readProvider]);
 
   const handleMint = async () => {
     if (mintStage !== "idle") return;
@@ -571,6 +693,123 @@ export default function Home() {
     }
   };
 
+  const handleMarketFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setMarketFileName(file.name);
+    setMarketSampleError(null);
+    setMarketSample(null);
+    setMarketSamplePreview([]);
+    setMarketDatasetHashes(null);
+    setMarketUploadStatus("idle");
+    setMarketUploadError(null);
+    setMarketSubmitStatus("idle");
+    setMarketSubmitError(null);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const content = String(reader.result ?? "");
+        const parsed = parseMarketSample(content);
+        setMarketSample(parsed);
+        setMarketSamplePreview(buildKlinePreview(parsed.rows, 10));
+        setMarketDatasetHashes(
+          computeMarketDatasetHashes({
+            datasetVersion: parsed.datasetVersion,
+            evalWindow: parsed.evalWindow,
+          })
+        );
+        setMarketDataJson(content);
+      } catch (error) {
+        setMarketSampleError(getErrorMessage(error, "市场样本解析失败"));
+      }
+    };
+    reader.onerror = () => {
+      setMarketSampleError("读取文件失败");
+    };
+    reader.readAsText(file);
+  };
+
+  const handleMarketUpload = async () => {
+    if (marketUploadStatus === "uploading") return;
+    if (!marketDataJson.trim()) {
+      setMarketUploadStatus("error");
+      setMarketUploadError("请先选择市场样本文件");
+      return;
+    }
+
+    setMarketUploadError(null);
+    setMarketUploadStatus("uploading");
+
+    try {
+      const signer = await ensureWallet();
+      const rootHash = await uploadJsonContent(marketDataJson, signer);
+      setMarketDataRoot(rootHash);
+      setMarketUploadStatus("success");
+    } catch (error: unknown) {
+      setMarketUploadStatus("error");
+      setMarketUploadError(getErrorMessage(error, "市场样本上传失败"));
+    }
+  };
+
+  const handleStartNewRound = async () => {
+    if (marketSubmitStatus === "submitting") return;
+    if (!marketDataRoot || !marketDatasetHashes) {
+      setMarketSubmitStatus("error");
+      setMarketSubmitError("请先上传市场样本并确认哈希");
+      return;
+    }
+
+    setMarketSubmitError(null);
+    setMarketSubmitStatus("submitting");
+
+    try {
+      const signer = await ensureWallet();
+      const arena = new ethers.Contract(
+        TRADING_ARENA_ADDRESS,
+        TRADING_ARENA_ABI,
+        signer
+      );
+      const tx = await arena.startNewRound(
+        marketDataRoot,
+        marketDatasetHashes.datasetVersionHash,
+        marketDatasetHashes.evalWindowHash
+      );
+      await tx.wait();
+      setMarketSubmitStatus("success");
+      await loadLeaderboard();
+    } catch (error: unknown) {
+      setMarketSubmitStatus("error");
+      setMarketSubmitError(getErrorMessage(error, "提交新轮次失败"));
+    }
+  };
+
+  const handleLoadSampleFromRoot = async () => {
+    if (!sampleLibraryRoot.trim()) {
+      setSampleLibraryError("请输入 market data root");
+      return;
+    }
+
+    setSampleLibraryError(null);
+    setSampleLibraryData(null);
+    setSampleLibraryPreview([]);
+
+    try {
+      const res = await fetch(
+        `/api/storage-download?root=${sampleLibraryRoot.trim()}`
+      );
+      const payload = (await res.json()) as { content?: string; error?: string };
+      if (!res.ok || !payload.content) {
+        throw new Error(payload.error ?? "下载样本失败");
+      }
+      const parsed = parseMarketSample(payload.content);
+      setSampleLibraryData(parsed);
+      setSampleLibraryPreview(buildKlinePreview(parsed.rows, 10));
+    } catch (error) {
+      setSampleLibraryError(getErrorMessage(error, "解析样本失败"));
+    }
+  };
+
   const handleCopyMarketHash = useCallback(async () => {
     if (!marketDataHash) return;
     if (currentRound !== "--") {
@@ -645,6 +884,16 @@ export default function Home() {
                         viewBox="0 0 24 24"
                       >
                         <path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                    )}
+                    {view === "admin" && (
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M4 7h16M4 12h16M4 17h16" />
                       </svg>
                     )}
                   </span>
@@ -758,7 +1007,7 @@ export default function Home() {
                     </span>
                   </div>
                   <p className="text-[10px] text-gray-500 uppercase font-bold mono mt-3">
-                  来源：TradingArena.getLeaderboardByRound
+                  来源：TradingArena.getLeaderboardByRound + StrategyNFT.totalStrategies
                   </p>
                   <div className="mt-6 flex flex-wrap items-center gap-3">
                     <span className="text-[10px] text-gray-500 uppercase font-bold">
@@ -864,8 +1113,9 @@ export default function Home() {
                               className="px-6 py-5 lg:px-8 text-right font-bold text-emerald-400 text-lg"
                               data-testid="leaderboard-pnl"
                             >
-                              {entry.pnl >= 0 ? "+" : ""}
-                              {entry.pnl.toFixed(2)}%
+                              {entry.pnl === null
+                                ? "--"
+                                : `${entry.pnl >= 0 ? "+" : ""}${entry.pnl.toFixed(2)}%`}
                             </td>
                             <td className="px-6 py-5 lg:px-8">
                               <span className="px-3 py-1 rounded-lg bg-blue-500/10 text-blue-400 text-[10px] mono border border-blue-500/20">
@@ -881,9 +1131,9 @@ export default function Home() {
                                   className={`w-2 h-2 rounded-full ${
                                     entry.status === "运行中"
                                       ? "bg-emerald-500"
-                                      : entry.status === "待验证"
-                                        ? "bg-amber-400"
-                                        : "bg-gray-500"
+                                      : entry.status === "已结束"
+                                        ? "bg-gray-500"
+                                        : "bg-amber-400"
                                   }`}
                                 />
                                 {entry.status}
@@ -1333,6 +1583,283 @@ export default function Home() {
                           </div>
                         </div>
                       </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <section
+              id="view-admin"
+              className={`view-section ${activeView === "admin" ? "active" : ""}`}
+            >
+              <div className="mx-auto max-w-4xl">
+                <div className="glass-panel rounded-3xl p-8">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
+                    <div>
+                      <h3 className="text-xl font-bold">Market Samples</h3>
+                      <p className="text-xs text-gray-500 mt-1">
+                        管理员上传样本并提交新轮次
+                      </p>
+                    </div>
+                    <div className="text-[10px] mono text-gray-500 uppercase">
+                      Owner: {arenaOwner ? shortenAddress(arenaOwner) : "--"}
+                    </div>
+                  </div>
+
+                  {!walletAddress && (
+                    <p className="text-sm text-gray-400">请先连接钱包。</p>
+                  )}
+                  {walletAddress && !isOwner && (
+                    <p className="text-sm text-amber-400">
+                      仅合约 owner 可操作市场样本管理。
+                    </p>
+                  )}
+
+                  {isOwner && (
+                    <div className="space-y-6">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-black/40 p-4">
+                          <p className="text-[10px] uppercase text-gray-500 font-bold mb-2">
+                            Market Sample File
+                          </p>
+                          <input
+                            type="file"
+                            accept=".json,application/json"
+                            onChange={handleMarketFileChange}
+                            className="w-full text-xs text-gray-300 file:mr-4 file:rounded-full file:border-0 file:bg-white/10 file:px-4 file:py-2 file:text-xs file:font-bold file:text-gray-200 hover:file:bg-white/20"
+                          />
+                          {marketFileName && (
+                            <p className="mt-2 text-xs text-gray-400">
+                              {marketFileName}
+                            </p>
+                          )}
+                          {marketSampleError && (
+                            <p className="mt-2 text-xs text-red-400">
+                              {marketSampleError}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="rounded-2xl border border-white/10 bg-black/40 p-4 space-y-2 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-gray-500 uppercase">
+                              Dataset Version
+                            </span>
+                            <span className="mono">
+                              {marketSample?.datasetVersion ?? "--"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500 uppercase">Eval Window</span>
+                            <span className="mono">
+                              {marketSample?.evalWindow ?? "--"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500 uppercase">Price Scale</span>
+                            <span className="mono">
+                              {marketSample?.scale?.price ?? "--"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500 uppercase">Volume Scale</span>
+                            <span className="mono">
+                              {marketSample?.scale?.volume ?? "--"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {marketDatasetHashes && (
+                        <div className="rounded-2xl border border-white/10 bg-black/40 p-4 text-xs">
+                          <div className="flex flex-wrap gap-4">
+                            <div>
+                              <p className="text-[10px] uppercase text-gray-500 font-bold">
+                                Dataset Version Hash
+                              </p>
+                              <p className="mono text-gray-300">
+                                {shortenHash(marketDatasetHashes.datasetVersionHash)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase text-gray-500 font-bold">
+                                Eval Window Hash
+                              </p>
+                              <p className="mono text-gray-300">
+                                {shortenHash(marketDatasetHashes.evalWindowHash)}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={handleMarketUpload}
+                          disabled={marketUploadStatus === "uploading"}
+                          className={`w-full rounded-2xl border border-white/10 px-6 py-4 text-sm font-bold transition-all ${
+                            marketUploadStatus === "uploading"
+                              ? "bg-white/5 text-gray-400 cursor-not-allowed"
+                              : "bg-white/10 hover:bg-white/20"
+                          }`}
+                        >
+                          {marketUploadStatus === "uploading"
+                            ? "上传中..."
+                            : "上传市场样本"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleStartNewRound}
+                          disabled={marketSubmitStatus === "submitting"}
+                          className={`w-full rounded-2xl border px-6 py-4 text-sm font-bold transition-all ${
+                            marketSubmitStatus === "submitting"
+                              ? "border-blue-500/20 bg-blue-500/10 text-blue-300/50 cursor-not-allowed"
+                              : "border-blue-500/40 bg-blue-500/20 text-blue-200 hover:bg-blue-500/30"
+                          }`}
+                        >
+                          {marketSubmitStatus === "submitting"
+                            ? "提交中..."
+                            : "提交新轮次"}
+                        </button>
+                      </div>
+
+                      {marketUploadError && (
+                        <p className="text-xs text-red-400">{marketUploadError}</p>
+                      )}
+                      {marketSubmitError && (
+                        <p className="text-xs text-red-400">{marketSubmitError}</p>
+                      )}
+
+                      {marketDataRoot && (
+                        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-xs text-emerald-200">
+                          <div className="font-bold">✅ Market Data Root</div>
+                          <div className="mono mt-2">{marketDataRoot}</div>
+                        </div>
+                      )}
+
+                      {marketSamplePreview.length > 0 && (
+                        <div className="rounded-2xl border border-white/10 bg-black/40 p-4">
+                          <p className="text-[10px] uppercase text-gray-500 font-bold mb-3">
+                            Kline Preview (First 10)
+                          </p>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-[640px] w-full text-left text-xs">
+                              <thead className="text-[10px] uppercase text-gray-500">
+                                <tr>
+                                  <th className="py-2">TS</th>
+                                  <th className="py-2">Open</th>
+                                  <th className="py-2">High</th>
+                                  <th className="py-2">Low</th>
+                                  <th className="py-2">Close</th>
+                                  <th className="py-2">Volume</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/5">
+                                {marketSamplePreview.map((row, index) => (
+                                  <tr key={`${row.ts}-${index}`}>
+                                    <td className="py-2 mono">{row.ts}</td>
+                                    <td className="py-2 mono">{row.open}</td>
+                                    <td className="py-2 mono">{row.high ?? "--"}</td>
+                                    <td className="py-2 mono">{row.low ?? "--"}</td>
+                                    <td className="py-2 mono">{row.close}</td>
+                                    <td className="py-2 mono">{row.volume ?? "--"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="glass-panel rounded-3xl p-8 mt-6">
+                  <h4 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-4">
+                    Market Sample Library
+                  </h4>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <input
+                      type="text"
+                      value={sampleLibraryRoot}
+                      onChange={(event) => setSampleLibraryRoot(event.target.value)}
+                      className="flex-1 bg-black/40 border border-white/10 rounded-2xl px-5 py-3 text-sm mono outline-none focus:border-blue-500 transition-all"
+                      placeholder="0x... (market data root)"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleLoadSampleFromRoot}
+                      className="rounded-2xl border border-white/10 bg-white/10 px-6 py-3 text-xs font-bold transition-all hover:bg-white/20"
+                    >
+                      解析样本
+                    </button>
+                  </div>
+                  {sampleLibraryError && (
+                    <p className="mt-3 text-xs text-red-400">{sampleLibraryError}</p>
+                  )}
+                  {sampleLibraryData && (
+                    <div className="mt-4 space-y-4 text-xs">
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-black/40 p-4">
+                          <div className="flex justify-between">
+                            <span className="text-gray-500 uppercase">Dataset</span>
+                            <span className="mono">{sampleLibraryData.datasetVersion}</span>
+                          </div>
+                          <div className="flex justify-between mt-2">
+                            <span className="text-gray-500 uppercase">Eval Window</span>
+                            <span className="mono">{sampleLibraryData.evalWindow}</span>
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-black/40 p-4">
+                          <div className="flex justify-between">
+                            <span className="text-gray-500 uppercase">Price Scale</span>
+                            <span className="mono">
+                              {sampleLibraryData.scale?.price ?? "--"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between mt-2">
+                            <span className="text-gray-500 uppercase">Volume Scale</span>
+                            <span className="mono">
+                              {sampleLibraryData.scale?.volume ?? "--"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      {sampleLibraryPreview.length > 0 && (
+                        <div className="rounded-2xl border border-white/10 bg-black/40 p-4">
+                          <p className="text-[10px] uppercase text-gray-500 font-bold mb-3">
+                            Kline Preview (First 10)
+                          </p>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-[640px] w-full text-left text-xs">
+                              <thead className="text-[10px] uppercase text-gray-500">
+                                <tr>
+                                  <th className="py-2">TS</th>
+                                  <th className="py-2">Open</th>
+                                  <th className="py-2">High</th>
+                                  <th className="py-2">Low</th>
+                                  <th className="py-2">Close</th>
+                                  <th className="py-2">Volume</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/5">
+                                {sampleLibraryPreview.map((row, index) => (
+                                  <tr key={`${row.ts}-${index}`}>
+                                    <td className="py-2 mono">{row.ts}</td>
+                                    <td className="py-2 mono">{row.open}</td>
+                                    <td className="py-2 mono">{row.high ?? "--"}</td>
+                                    <td className="py-2 mono">{row.low ?? "--"}</td>
+                                    <td className="py-2 mono">{row.close}</td>
+                                    <td className="py-2 mono">{row.volume ?? "--"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
