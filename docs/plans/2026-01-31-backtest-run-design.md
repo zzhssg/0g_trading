@@ -1,58 +1,75 @@
-# 极简回测执行链路设计（MVP）
+# 端到端 MVP 设计（Storage + Chain + Web + 回测）
 
 日期：2026-01-31
 
 ## 目标
-- 提供可复现的“回测执行”最小链路，输出 `backtest.log` 与 `pnlBps` 等指标。
-- 结果可用 `hashBacktestLog` 复算一致，并与 `submit-result.ts` 对齐。
+- 在 0G 测试网上完成“策略提交 → 回测 → 结果上链 → 可复现验证”的最小闭环。
+- 回测逻辑确定性、可复算；链上存证字段最小但足够复现。
 
 ## 约束与配置（0G MVP）
 - Chain ID: 16602（Galileo Testnet）
 - RPC: https://evmrpc-testnet.0g.ai
 - Storage Indexer: https://indexer-storage-testnet-turbo.0g.ai
 - EVM Version: cancun
+- 排除 Compute/DA（后续扩展）
 
-## 方案概述
-新增脚本 `scripts/backtest-run.ts`：
-- 输入：`MarketData.json`（含 rows）+ `strategy.json`
-- 输出：`backtest.log` + `backtest-result.json`
-- 复用 `scripts/lib/storageBundle.ts` 的 `hashBacktestLog` 保持哈希一致
-- 不自动上链，仅产出指标供 `submit-result.ts` 使用
+## 方案选项（推荐）
+- 方案 A（不改合约）：将“样本 manifest root”直接写入 `marketDataRoot`，靠链下约定解释。
+- 方案 B（推荐，最小改动）：明确 `marketDataRoot` 语义为样本 manifest root，并将 `backtestLogRoot` 纳入 `verifyResult`。
+- 方案 C（重改）：链上保存样本列表结构，成本与复杂度高。
 
-## 数据流
-1) 读取 `MarketData.json` 的 `rows`（OHLCV）
-2) 读取 `strategy.json`（仅做基本存在性检查，不解析复杂规则）
-3) 极简回测：第一根开多、最后一根平仓
-4) 生成 `backtest.log` 与 `backtestLogHash`
-5) 生成 `backtest-result.json`（pnlBps/totalTrades/winningTrades/backtestLogHash/marketMeta）
+## 架构与数据流
+1) 管理员用 `scripts/data/feather_to_market_json.py` 生成 3 份样本 JSON（符合 `docs/market-data-schema.md`）。
+2) 上传样本到 0G Storage，生成 manifest（包含 3 个样本的 storage root 与元信息），计算 manifest root。
+3) 管理员调用 `TradingArena.startNewRound` 写入 `marketDataRoot`（manifest root）、`datasetVersionHash`、`evalWindowHash`。
+4) 选手提交策略：前端生成 `codeHash/paramsHash`，通过 `StrategyNFT.registerStrategy` 上链，同时上传策略与元数据到 Storage。
+5) 回测脚本读取 manifest → 下载样本与策略 → 产出 `backtest.log` 与 `backtest-result.json`。
+6) 通过 `scripts/submit-result.ts` 提交结果，链上记录 PnL 与日志哈希。
+7) 用户从 Storage 拉取样本与日志复算哈希，调用 `verifyResult` 校验一致。
 
-## 回测逻辑（确定性）
-- 取 `rows[0].open` 为 `entryPrice`，`rows[last].close` 为 `exitPrice`
-- `side = "long"`，`size = --size`（默认 1）
-- `pnlBps = round(((exit-entry)/entry) * 10000 * size)`
-- `totalTrades = 1`
-- `winningTrades = pnlBps > 0 ? 1 : 0`
-- 日志 `ts` 取第一根时间
+## 链上字段与存证（最小可复现）
+- StrategyNFT：`codeHash`、`paramsHash`、`storageRoot`、`performancePointer`。
+- TradingArena：`marketDataRoot`（样本 manifest root）、`datasetVersionHash`、`evalWindowHash`、`backtestLogRoot`、`executionLogHash`、`pnl/totalTrades/winningTrades`。
+- 关键校验：`verifyResult` 至少校验 `executionLogHash/codeHash/paramsHash/datasetVersionHash/evalWindowHash/marketDataRoot/backtestLogRoot`。
 
-## CLI 设计
-- `--market`：市场数据 JSON 路径
-- `--strategy`：策略 JSON 路径
-- `--outLog`：输出日志路径（默认 `./data/backtest.log`）
-- `--outResult`：输出结果路径（默认 `./data/backtest-result.json`）
-- `--size`：仓位规模（默认 1）
+## 哈希规范（链下约定）
+- `codeHash`：策略代码文件内容 hash。
+- `paramsHash`：策略参数 JSON 规范化后 hash。
+- `backtestLogRoot`：`backtest.log` 内容 hash（与 `hashBacktestLog` 一致）。
+- `executionLogHash`：回测结果 JSON 的 hash。
+- `marketDataRoot`：样本 manifest root（包含 3 个样本 root 与元信息）。
+
+## 组件职责
+- Storage：样本/策略/日志上传下载，产出 rootHash 与 manifest。
+- Chain：策略与结果存证，提供可验证字段。
+- Backtest：确定性极简回测执行与日志生成。
+- Web：最小 UI，完成样本展示、策略提交、结果排名展示。
 
 ## 错误处理
-- 缺少文件 / JSON 解析失败 → 报错退出
-- `rows` 缺失或为空 → 报错退出
-- `rows` 缺少 open/close/ts → 报错退出
+- 缺失必填字段（rows/策略字段/log/root）即失败。
+- 哈希不一致即判定“不可复现”。
+- 轮次非 active 时拒绝提交结果。
 
-## 测试策略（TDD）
-- 新增 `test/backtest-run.spec.ts`：
-  - 最小 market 数据（2 根 K）+ 任意 strategy
-  - 校验 `backtest.log` 结构、`pnlBps` 计算与 `backtestLogHash` 稳定
-  - 缺少 rows 时抛错
+## 测试与验证
+- 脚本单测：市场数据规范化、回测输出与哈希稳定性。
+- 集成验证：固定样本+策略→生成日志→提交→`verifyResult` 通过。
+- 复算验证：从 Storage 下载样本/日志，复算哈希并与链上匹配。
+
+## MVP 交付清单
+- 合约最小改动（若采用方案 B）。
+- 样本规范化与上传 + manifest 生成脚本。
+- 回测执行脚本 + 结果提交脚本。
+- 前端最小展示与提交。
+- 可复现验证演示。
+
+## 5 小时内切片
+- 0.5h：环境 + 0G 配置核对
+- 1.5h：合约小改与部署
+- 1h：Storage 上传与 manifest
+- 1h：回测脚本 + 结果提交
+- 1h：前端展示 + 验证演示
 
 ## 非目标
 - 不实现复杂策略规则解析
-- 不自动提交链上
 - 不引入 Compute/DA
+- 不做链上回测
