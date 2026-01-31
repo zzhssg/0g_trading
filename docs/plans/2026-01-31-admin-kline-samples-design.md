@@ -41,6 +41,12 @@
 - `scale`: `{ price: number, volume: number }`
 - `rows`: `[{ ts, open, high, low, close, volume }]`（整数缩放）
 
+## 规范与数据校验
+- 结构规范来源：`docs/market-data-schema.md`。
+- 必须校验：`schemaVersion` 固定、`scale` 为正整数、`rows` 字段顺序固定。
+- 时间规范：`ts` 必须为 UTC ISO 且以 `Z` 结尾。
+- 解析失败或字段缺失：前端拒绝渲染并提示重试。
+
 ## 样本清单结构（market-samples.json）
 示例字段：
 - `id`, `symbol`, `title`, `range`, `interval`
