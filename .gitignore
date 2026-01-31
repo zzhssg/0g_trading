@@ -1,3 +1,7 @@
 node_modules
 
 .worktrees
+artifacts/
+cache/
+typechain-types/
+scripts/data/__pycache__/
