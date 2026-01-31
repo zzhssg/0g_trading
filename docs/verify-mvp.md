@@ -81,14 +81,29 @@ npm run --silent hardhat -- run scripts/submit-result.ts --network 0g-testnet --
 - `backtestLogRoot` 来自 0G Storage 的回测日志 root（performancePointer）。
 - `executionLogHash` 为回测日志哈希（`backtestLogHash`）。
 
-## 7. 本地复算与对比
+## 7. 回测执行（极简脚本）
+
+```bash
+npm run --silent hardhat -- run scripts/backtest-run.ts -- \
+  --market ./data/MarketData.json \
+  --strategy ./data/strategy.json \
+  --outLog ./data/backtest.log \
+  --outResult ./data/backtest-result.json \
+  --size 1
+```
+
+输出：
+- `backtest.log`：用于上传到 0G Storage 并生成 `backtestLogRoot`
+- `backtest-result.json`：包含 `pnlBps/totalTrades/winningTrades/backtestLogHash`
+
+## 8. 本地复算与对比
 
 前端“策略工厂”中：
 1) 填入 Strategy Code / Market Data JSON  
 2) 点击 **Local Verify (Run Strategy)**  
 3) 将本地 PnL 与链上排行榜对应策略的 PnL 对比  
 
-## 8. 验证通过标准
+## 9. 验证通过标准
 
 - 复算结果 == 链上 `backtestLogHash`（executionLogHash）
 - 轮次 `datasetVersionHash/evalWindowHash` 与本地窗口一致
