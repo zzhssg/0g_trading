@@ -25,8 +25,8 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 Create or update `.env.local` in this directory:
 
 ```
-NEXT_PUBLIC_STRATEGY_NFT_ADDRESS=0x...
-NEXT_PUBLIC_TRADING_ARENA_ADDRESS=0x...
+NEXT_PUBLIC_STRATEGY_NFT_ADDRESS=0xD2C5fDA21334c45f28ee992d4564C5CB29A06A7c
+NEXT_PUBLIC_TRADING_ARENA_ADDRESS=0xbDffd2F1d2399c75aF9B171754c55Ca18EC7a1CB
 NEXT_PUBLIC_RPC_URL=https://evmrpc-testnet.0g.ai
 NEXT_PUBLIC_STORAGE_INDEXER=https://indexer-storage-testnet-turbo.0g.ai
 NEXT_PUBLIC_FLOW_CONTRACT=0x22E03a6A89B950F1c82ec5e74F8eCa321a105296

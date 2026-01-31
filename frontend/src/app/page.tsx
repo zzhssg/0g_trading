@@ -11,6 +11,7 @@ import {
   type MarketRow,
   type MarketSample,
 } from "../lib/marketSample";
+import { MarketSamplesPanel } from "./components/MarketSamplesPanel";
 import { computePnlFromLog, hashLog } from "../lib/verify";
 
 declare global {
@@ -1862,6 +1863,10 @@ export default function Home() {
                       )}
                     </div>
                   )}
+                </div>
+
+                <div className="mt-6">
+                  <MarketSamplesPanel />
                 </div>
               </div>
             </section>

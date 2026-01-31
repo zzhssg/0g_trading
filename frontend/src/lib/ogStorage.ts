@@ -27,6 +27,8 @@ export type UploadStrategyDeps = {
   ) => Promise<string>;
 };
 
+export type UploadJsonDeps = UploadStrategyDeps;
+
 function normalizeEnvValue(value?: string) {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
@@ -56,7 +58,7 @@ export function resolveStorageConfig(
   return { indexerUrl, flowContract };
 }
 
-export async function uploadStrategyJson(
+async function uploadJson(
   content: string,
   signer: unknown,
   deps: UploadStrategyDeps = {}
@@ -69,22 +71,30 @@ export async function uploadStrategyJson(
     return deps.upload(content, signer, config);
   }
 
-  const { Indexer, ZgFile, getFlowContract } = await import("@0glabs/0g-ts-sdk");
-  const blob = new Blob([content], { type: "application/json" });
-  if (typeof ZgFile?.fromBlob !== "function") {
-    throw new Error("ZgFile.fromBlob is not available in this SDK build");
+  const res = await fetch("/api/storage-upload", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ content, indexerUrl: config.indexerUrl }),
+  });
+  const payload = (await res.json()) as { rootHash?: string; error?: string };
+  if (!res.ok || !payload.rootHash) {
+    throw new Error(payload.error ?? "Storage 上传失败");
   }
-  const file = await ZgFile.fromBlob(blob);
-  const [tree, treeErr] = await file.merkleTree();
-  if (treeErr) {
-    throw treeErr;
-  }
-  const indexer = new Indexer(config.indexerUrl);
-  const flowContract = getFlowContract(config.flowContract, signer);
-  await file.upload(flowContract, indexer);
-  const rootHash = tree.rootHash();
-  if (file.close) {
-    await file.close();
-  }
-  return rootHash;
+  return payload.rootHash;
+}
+
+export async function uploadJsonContent(
+  content: string,
+  signer: unknown,
+  deps: UploadJsonDeps = {}
+): Promise<string> {
+  return uploadJson(content, signer, deps);
+}
+
+export async function uploadStrategyJson(
+  content: string,
+  signer: unknown,
+  deps: UploadStrategyDeps = {}
+): Promise<string> {
+  return uploadJson(content, signer, deps);
 }
