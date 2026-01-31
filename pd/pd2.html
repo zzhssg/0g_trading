@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>0G AI Trading Arena | Verifiable Strategy Protocol</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Plus+Jakarta+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #080a0f;
+            --panel-bg: #11141d;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+        }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg-deep);
+            color: #f8fafc;
+            overflow: hidden;
+        }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .glass-panel {
+            background: rgba(17, 20, 29, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .sidebar-item.active {
+            background: linear-gradient(90deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0) 100%);
+            border-left: 3px solid var(--accent-blue);
+            color: var(--accent-blue);
+        }
+        .view-section { display: none; }
+        .view-section.active { display: block; animation: fadeIn 0.4s ease-out; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 隐藏滚动条但保留功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        .loading-shimmer {
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+    </style>
+</head>
+<body class="flex h-screen w-screen overflow-hidden">
+
+    <aside class="w-72 h-full flex flex-col border-r border-white/5 bg-[#0b0e14] z-50">
+        <div class="p-8">
+            <div class="flex items-center gap-3 mb-10">
+                <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-bold text-xl shadow-[0_0_20px_rgba(59,130,246,0.4)]">0G</div>
+                <div class="font-bold text-xl tracking-tight uppercase">Arena</div>
+            </div>
+
+            <nav class="space-y-2">
+                <button onclick="switchView('dashboard')" id="nav-dashboard" class="sidebar-item active w-full flex items-center gap-4 px-4 py-3 rounded-lg text-sm font-semibold transition-all hover:bg-white/5">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                    竞技场大盘
+                </button>
+                <button onclick="switchView('factory')" id="nav-factory" class="sidebar-item w-full flex items-center gap-4 px-4 py-3 rounded-lg text-sm font-semibold transition-all hover:bg-white/5 text-gray-500">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+                    策略工厂
+                </button>
+                <button onclick="switchView('inspector')" id="nav-inspector" class="sidebar-item w-full flex items-center gap-4 px-4 py-3 rounded-lg text-sm font-semibold transition-all hover:bg-white/5 text-gray-500">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    验证详情
+                </button>
+            </nav>
+        </div>
+
+        <div class="mt-auto p-6 border-t border-white/5 bg-black/20">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]"></div>
+                <span class="text-[10px] mono text-gray-400 uppercase tracking-widest">0G Galileo Testnet</span>
+            </div>
+            <button id="connectWallet" class="w-full py-3 rounded-xl bg-white/5 border border-white/10 text-xs font-bold hover:bg-white/10 transition-all">
+                未连接钱包
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 h-full overflow-y-auto no-scrollbar relative">
+        
+        <header class="sticky top-0 z-40 px-10 py-6 flex justify-between items-center glass-panel border-b border-white/5">
+            <h2 id="view-title" class="text-2xl font-bold tracking-tight">竞技场大盘</h2>
+            <div class="flex items-center gap-4">
+                <div class="text-right">
+                    <p class="text-[10px] text-gray-500 uppercase font-bold mono">Current Round (Demo)</p>
+                    <p id="currentRound" class="text-sm font-bold mono">#--</p>
+                </div>
+                <div class="h-8 w-[1px] bg-white/10 mx-2"></div>
+                <button class="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 border border-white/5">
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                </button>
+            </div>
+        </header>
+
+        <div class="p-10">
+            <section id="view-dashboard" class="view-section active">
+                <div class="grid grid-cols-12 gap-6 mb-10">
+                    <div class="col-span-8 glass-panel rounded-3xl p-8 overflow-hidden relative">
+                        <div class="absolute top-0 right-0 p-8">
+                            <svg class="w-32 h-32 text-blue-500/10" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+                        </div>
+                        <h3 class="text-gray-400 text-sm font-semibold mb-1">Total PnL Value</h3>
+                        <div class="text-5xl font-extrabold tracking-tighter mb-4">+1,242.84 <span class="text-xl text-blue-500 uppercase">OG</span></div>
+                        <div class="flex gap-4 text-xs">
+                            <span class="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-500 font-bold">+12.4% 今日</span>
+                            <span class="px-3 py-1 rounded-full bg-white/5 text-gray-400 font-bold mono">TVL: 42,000 OG</span>
+                        </div>
+                        <p class="text-[10px] text-gray-500 uppercase font-bold mono mt-3">Demo / 链上最小字段</p>
+                    </div>
+                    <div class="col-span-4 glass-panel rounded-3xl p-8 flex flex-col justify-center">
+                        <p class="text-[10px] text-gray-500 uppercase font-bold mb-2">Active Strategies</p>
+                        <div class="text-4xl font-bold mono">42</div>
+                        <div class="mt-4 h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                            <div class="h-full bg-blue-600 w-2/3 shadow-[0_0_10px_#3b82f6]"></div>
+                        </div>
+                        <p class="text-[10px] text-blue-500 mt-2 font-bold uppercase tracking-tighter">Capacity 68%</p>
+                    </div>
+                </div>
+
+                <div class="glass-panel rounded-3xl overflow-hidden">
+                    <div class="px-8 py-6 border-b border-white/5 flex justify-between items-center">
+                        <h4 class="font-bold">实时排行榜</h4>
+                        <button id="refreshLeaderboard" class="text-xs text-blue-500 font-bold uppercase tracking-widest">刷新数据</button>
+                    </div>
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="bg-white/5 text-[10px] text-gray-500 uppercase font-bold">
+                                <th class="px-8 py-4">Rank</th>
+                                <th class="px-8 py-4">Strategy ID</th>
+                                <th class="px-8 py-4 text-right">PnL (%)</th>
+                                <th class="px-8 py-4">Verification</th>
+                                <th class="px-8 py-4">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboardBody" class="divide-y divide-white/5">
+                            <tr class="hover:bg-white/5 transition-all">
+                                <td class="px-8 py-5 font-bold italic text-yellow-500">#1</td>
+                                <td class="px-8 py-5">
+                                    <div class="font-bold">GPT-Arbitrage-X</div>
+                                    <div class="text-[10px] text-gray-500 mono">Token ID: 1042</div>
+                                </td>
+                                <td class="px-8 py-5 text-right font-bold text-emerald-400 text-lg">+82.41%</td>
+                                <td class="px-8 py-5">
+                                    <span class="px-3 py-1 rounded-lg bg-blue-500/10 text-blue-400 text-[10px] mono border border-blue-500/20">0xDA...201A</span>
+                                </td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-2 text-xs text-gray-400">
+                                        <div class="w-2 h-2 rounded-full bg-emerald-500"></div> 运行中
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr class="hover:bg-white/5 transition-all">
+                                <td class="px-8 py-5 font-bold italic text-gray-400">#2</td>
+                                <td class="px-8 py-5">
+                                    <div class="font-bold">Neural-Grid-V4</div>
+                                    <div class="text-[10px] text-gray-500 mono">Token ID: 1039</div>
+                                </td>
+                                <td class="px-8 py-5 text-right font-bold text-emerald-400 text-lg">+61.05%</td>
+                                <td class="px-8 py-5">
+                                    <span class="px-3 py-1 rounded-lg bg-blue-500/10 text-blue-400 text-[10px] mono border border-blue-500/20">0x77...E921</span>
+                                </td>
+                                <td class="px-8 py-5">
+                                    <div class="flex items-center gap-2 text-xs text-gray-400">
+                                        <div class="w-2 h-2 rounded-full bg-emerald-500"></div> 运行中
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="grid grid-cols-12 gap-6 mt-10">
+                    <div class="col-span-7 glass-panel rounded-3xl p-8">
+                        <h4 class="font-bold mb-4">结果提交（链上写入）</h4>
+                        <div class="grid grid-cols-12 gap-4">
+                            <div class="col-span-4">
+                                <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">Strategy ID</label>
+                                <input id="submitStrategyId" type="number" class="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-all" placeholder="1">
+                            </div>
+                            <div class="col-span-4">
+                                <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">PnL (int)</label>
+                                <input id="submitPnl" type="number" class="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-all" placeholder="1250">
+                            </div>
+                            <div class="col-span-4">
+                                <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">Total Trades</label>
+                                <input id="submitTotalTrades" type="number" class="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-all" placeholder="42">
+                            </div>
+                            <div class="col-span-4">
+                                <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">Winning Trades</label>
+                                <input id="submitWinningTrades" type="number" class="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-all" placeholder="25">
+                            </div>
+                            <div class="col-span-8">
+                                <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">Execution Log Hash (0x...)</label>
+                                <input id="submitLogHash" type="text" class="w-full bg-black/40 border border-white/10 rounded-2xl px-4 py-3 text-sm mono outline-none focus:border-blue-500 transition-all" placeholder="0x...">
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 mt-5">
+                            <input id="marketDataHash" type="text" class="flex-1 bg-black/40 border border-white/10 rounded-2xl px-4 py-3 text-sm mono outline-none focus:border-blue-500 transition-all" placeholder="Market Data Hash (0x...)">
+                            <button id="startRoundButton" class="px-4 py-3 rounded-2xl bg-white/10 border border-white/10 text-xs font-bold hover:bg-white/15 transition-all">启动轮次</button>
+                            <button id="submitResultButton" class="px-4 py-3 rounded-2xl bg-blue-600 text-xs font-bold hover:bg-blue-700 transition-all">提交结果</button>
+                        </div>
+                    </div>
+                    <div class="col-span-5 glass-panel rounded-3xl p-8">
+                        <h4 class="font-bold mb-4">链上状态</h4>
+                        <div class="text-xs text-gray-400 space-y-2">
+                            <div class="flex justify-between"><span>网络</span><span id="networkStatus" class="mono">未连接</span></div>
+                            <div class="flex justify-between"><span>StrategyNFT</span><span id="strategyNftStatus" class="mono">未配置</span></div>
+                            <div class="flex justify-between"><span>TradingArena</span><span id="arenaStatus" class="mono">未配置</span></div>
+                            <div class="flex justify-between"><span>Storage Indexer</span><span id="indexerStatus" class="mono">未配置</span></div>
+                            <div class="flex justify-between"><span>Flow Contract</span><span id="flowStatus" class="mono">未配置</span></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-factory" class="view-section">
+                <div class="grid grid-cols-12 gap-10">
+                    <div class="col-span-7 space-y-6">
+                        <div class="glass-panel rounded-3xl p-8">
+                            <h3 class="text-xl font-bold mb-6 italic">合约配置</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">StrategyNFT Address</label>
+                                    <input id="configStrategyNft" type="text" class="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm mono focus:border-blue-500 transition-all outline-none" placeholder="0x...">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">TradingArena Address</label>
+                                    <input id="configTradingArena" type="text" class="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm mono focus:border-blue-500 transition-all outline-none" placeholder="0x...">
+                                </div>
+                                <div class="grid grid-cols-12 gap-4">
+                                    <div class="col-span-6">
+                                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">Chain ID</label>
+                                        <input id="configChainId" type="number" class="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm focus:border-blue-500 transition-all outline-none" placeholder="16602">
+                                    </div>
+                                    <div class="col-span-6">
+                                        <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">RPC URL</label>
+                                        <input id="configRpcUrl" type="text" class="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm focus:border-blue-500 transition-all outline-none" placeholder="https://evmrpc-testnet.0g.ai">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">Flow Contract</label>
+                                    <input id="configFlowContract" type="text" class="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm mono focus:border-blue-500 transition-all outline-none" placeholder="0x22E03a6A89B950F1c82ec5e74F8eCa321a105296">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">Storage Indexer</label>
+                                    <input id="configIndexerUrl" type="text" class="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm focus:border-blue-500 transition-all outline-none" placeholder="https://indexer-storage-testnet-turbo.0g.ai">
+                                </div>
+                                <button id="saveConfigButton" class="w-full py-4 rounded-2xl bg-white/5 border border-white/10 font-bold text-xs hover:bg-white/10 transition-all">保存配置</button>
+                                <p class="text-[10px] text-gray-500 uppercase font-bold mono">未配置时仅展示 UI，不可链上交互</p>
+                            </div>
+                        </div>
+                        <div class="glass-panel rounded-3xl p-8">
+                            <h3 class="text-xl font-bold mb-6 italic">Deploy Your AI Strategy</h3>
+                            <div class="space-y-4">
+                                <div>
+                                <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">Strategy Name</label>
+                                <input id="strategyName" type="text" class="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm focus:border-blue-500 transition-all outline-none" placeholder="My Alpha Bot">
+                            </div>
+                            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                <div>
+                                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">Dataset Version</label>
+                                    <input id="strategyDatasetVersion" type="text" class="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm focus:border-blue-500 transition-all outline-none" placeholder="v1" value="v1">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">Eval Window</label>
+                                    <input id="strategyEvalWindow" type="text" class="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm focus:border-blue-500 transition-all outline-none" placeholder="2025-01-01~2025-02-01" value="2025-01-01~2025-02-01">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">Strategy Logic (JSON)</label>
+                                <textarea id="strategyLogic" rows="10" class="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm font-mono focus:border-blue-500 transition-all outline-none" placeholder='{ "indicators": ["MACD", "RSI"], "threshold": 0.8 }'></textarea>
+                            </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2 ml-1">Storage Root (可选)</label>
+                                    <input id="strategyStorageRoot" type="text" class="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm mono focus:border-blue-500 transition-all outline-none" placeholder="0x... (空则使用 codeHash)">
+                                </div>
+                                <div class="flex items-center gap-4">
+                                    <button id="uploadStrategyButton" class="px-4 py-3 rounded-2xl bg-white/10 border border-white/10 text-xs font-bold hover:bg-white/15 transition-all">上传到 0G Storage</button>
+                                    <span id="uploadStrategyStatus" class="text-[10px] text-gray-500 uppercase font-bold mono">未上传</span>
+                                </div>
+                                <button id="mintButton" onclick="simulateMint()" class="w-full py-5 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 font-bold text-white shadow-xl hover:scale-[1.01] active:scale-[0.98] transition-all flex justify-center items-center gap-3">
+                                    <span>注册策略 (Strategy NFT)</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-span-5">
+                        <div class="glass-panel rounded-3xl p-8 sticky top-32">
+                            <h4 class="text-sm font-bold uppercase tracking-widest text-gray-500 mb-6">Execution Steps</h4>
+                            <div class="space-y-8 relative">
+                                <div class="absolute left-[15px] top-2 bottom-2 w-0.5 bg-white/5"></div>
+                                
+                                <div class="flex gap-6 relative">
+                                    <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold z-10">1</div>
+                                    <div>
+                                        <h5 class="font-bold text-sm">JSON Data Hashing</h5>
+                                        <p class="text-xs text-gray-500 mt-1">计算策略代码的 Keccak-256 哈希值作为指纹。</p>
+                                    </div>
+                                </div>
+
+                                <div class="flex gap-6 relative">
+                                    <div class="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xs font-bold z-10">2</div>
+                                    <div>
+                                        <h5 class="font-bold text-sm">0G Storage Upload</h5>
+                                        <p class="text-xs text-gray-500 mt-1">可选：上传策略文件，失败时降级为仅存 hash。</p>
+                                    </div>
+                                </div>
+
+                                <div class="flex gap-6 relative">
+                                    <div class="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xs font-bold z-10">3</div>
+                                    <div>
+                                        <h5 class="font-bold text-sm">On-chain Registration</h5>
+                                        <p class="text-xs text-gray-500 mt-1">简化 ERC-721 注册，链上记录策略指纹。</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-inspector" class="view-section">
+                <div class="max-w-3xl mx-auto">
+                    <div class="glass-panel rounded-3xl p-10 text-center">
+                        <div class="w-20 h-20 bg-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-500">
+                            <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        </div>
+                        <h3 class="text-2xl font-bold mb-2">Verifiable Result Inspector</h3>
+                        <p class="text-gray-500 text-sm mb-8">输入 Hash，与链上记录对比验证</p>
+                        
+                        <div class="flex gap-4 mb-10">
+                            <input id="verifyInput" type="text" class="flex-1 bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm mono outline-none focus:border-blue-500 transition-all" placeholder="Enter Root Hash / Log Hash (0x...)">
+                            <button id="verifyButton" class="px-8 py-4 rounded-2xl bg-white text-black font-bold hover:bg-gray-200 transition-all">验证</button>
+                        </div>
+                        <div class="flex gap-4 mb-10">
+                            <input id="verifyRoundId" type="number" class="flex-1 bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm mono outline-none focus:border-blue-500 transition-all" placeholder="Round ID">
+                            <input id="verifyStrategyId" type="number" class="flex-1 bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm mono outline-none focus:border-blue-500 transition-all" placeholder="Strategy ID">
+                        </div>
+
+                        <div id="verifyResult" class="hidden animate-pulse">
+                            <div class="p-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-left">
+                                <div class="flex justify-between items-center mb-4">
+                                    <span id="verifyStatusText" class="text-emerald-500 font-bold flex items-center gap-2">
+                                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                                        Verification Success
+                                    </span>
+                                    <span class="text-[10px] mono text-gray-500">Node: 0G-Validator-7</span>
+                                </div>
+                                <div class="space-y-2">
+                                    <div class="flex justify-between text-xs">
+                                        <span class="text-gray-500 uppercase">Input Data Root</span>
+                                        <span id="verifyInputHash" class="mono">0x71c2...e81a</span>
+                                    </div>
+                                    <div class="flex justify-between text-xs">
+                                        <span class="text-gray-500 uppercase">PnL Consensus</span>
+                                        <span class="mono text-emerald-400 font-bold">+12.5%</span>
+                                    </div>
+                                    <div class="flex justify-between text-xs">
+                                        <span class="text-gray-500 uppercase">Execution Time</span>
+                                        <span class="mono">142ms</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script type="module">
+        import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.10.0/dist/ethers.esm.min.js";
+        import { Indexer, ZgFile, getFlowContract } from "https://esm.sh/@0g-ai/0g-ts-sdk";
+        function switchView(viewId) {
+            // 更新标题
+            const titles = {
+                'dashboard': '竞技场大盘',
+                'factory': '策略工厂',
+                'inspector': '验证详情'
+            };
+            document.getElementById('view-title').innerText = titles[viewId];
+
+            // 切换导航状态
+            document.querySelectorAll('.sidebar-item').forEach(el => {
+                el.classList.remove('active', 'text-blue-500');
+                el.classList.add('text-gray-500');
+            });
+            document.getElementById('nav-' + viewId).classList.add('active');
+            document.getElementById('nav-' + viewId).classList.remove('text-gray-500');
+
+            // 切换视图
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            document.getElementById('view-' + viewId).classList.add('active');
+        }
+
+        const ABI_STRATEGY_NFT = [
+            "event StrategyRegistered(uint256 indexed tokenId,address indexed creator,bytes32 codeHash,bytes32 paramsHash,string datasetVersion,string evalWindow,string storageRoot,string performancePointer)",
+            "function registerStrategy(bytes32 codeHash,bytes32 paramsHash,string datasetVersion,string evalWindow,string storageRoot,string performancePointer,string tokenURI) external returns (uint256)",
+            "function getStrategy(uint256 tokenId) external view returns (tuple(bytes32 codeHash,bytes32 paramsHash,string datasetVersion,string evalWindow,string storageRoot,string performancePointer,uint256 createdAt,address creator,bool isActive))",
+            "function totalStrategies() external view returns (uint256)"
+        ];
+
+        const ABI_TRADING_ARENA = [
+            "function startNewRound(bytes32 marketDataHash) external",
+            "function submitResult(uint256 strategyId,int256 pnl,uint256 totalTrades,uint256 winningTrades,bytes32 executionLogHash) external",
+            "function getLeaderboard(uint256 limit) external view returns (uint256[] strategyIds, int256[] pnls)",
+            "function verifyResult(uint256 roundId,uint256 strategyId,bytes32 expectedLogHash) external view returns (bool)",
+            "function currentRound() external view returns (uint256)"
+        ];
+
+        const DEFAULT_CONFIG = {
+            chainId: 16602,
+            chainName: "0G-Galileo-Testnet",
+            rpcUrl: "https://evmrpc-testnet.0g.ai",
+            explorerUrl: "https://chainscan-galileo.0g.ai",
+            strategyNftAddress: "",
+            tradingArenaAddress: "",
+            indexerUrl: "https://indexer-storage-testnet-turbo.0g.ai",
+            flowContractAddress: "0x22E03a6A89B950F1c82ec5e74F8eCa321a105296"
+        };
+
+        let appConfig = { ...DEFAULT_CONFIG };
+        let provider = null;
+        let signer = null;
+        let currentAccount = null;
+
+        function loadConfig() {
+            try {
+                const saved = localStorage.getItem("arenaConfig");
+                if (saved) {
+                    appConfig = { ...DEFAULT_CONFIG, ...JSON.parse(saved) };
+                }
+            } catch (error) {
+                console.warn("Config load failed:", error);
+            }
+            document.getElementById("configStrategyNft").value = appConfig.strategyNftAddress || "";
+            document.getElementById("configTradingArena").value = appConfig.tradingArenaAddress || "";
+            document.getElementById("configChainId").value = appConfig.chainId || "";
+            document.getElementById("configRpcUrl").value = appConfig.rpcUrl || "";
+            document.getElementById("configIndexerUrl").value = appConfig.indexerUrl || "";
+            document.getElementById("configFlowContract").value = appConfig.flowContractAddress || "";
+            renderConfigStatus();
+        }
+
+        function saveConfig() {
+            appConfig.strategyNftAddress = document.getElementById("configStrategyNft").value.trim();
+            appConfig.tradingArenaAddress = document.getElementById("configTradingArena").value.trim();
+            appConfig.chainId = Number(document.getElementById("configChainId").value) || DEFAULT_CONFIG.chainId;
+            appConfig.rpcUrl = document.getElementById("configRpcUrl").value.trim() || DEFAULT_CONFIG.rpcUrl;
+            appConfig.indexerUrl = document.getElementById("configIndexerUrl").value.trim() || DEFAULT_CONFIG.indexerUrl;
+            appConfig.flowContractAddress = document.getElementById("configFlowContract").value.trim() || DEFAULT_CONFIG.flowContractAddress;
+            localStorage.setItem("arenaConfig", JSON.stringify(appConfig));
+            renderConfigStatus();
+        }
+
+        function renderConfigStatus() {
+            document.getElementById("strategyNftStatus").innerText = appConfig.strategyNftAddress
+                ? shortHash(appConfig.strategyNftAddress)
+                : "未配置";
+            document.getElementById("arenaStatus").innerText = appConfig.tradingArenaAddress
+                ? shortHash(appConfig.tradingArenaAddress)
+                : "未配置";
+            document.getElementById("indexerStatus").innerText = appConfig.indexerUrl
+                ? shortHash(appConfig.indexerUrl)
+                : "未配置";
+            document.getElementById("flowStatus").innerText = appConfig.flowContractAddress
+                ? shortHash(appConfig.flowContractAddress)
+                : "未配置";
+        }
+
+        function shortHash(value) {
+            if (!value) return "--";
+            return value.length > 10 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value;
+        }
+
+        function normalizeHash(value) {
+            const trimmed = (value || "").trim();
+            if (!trimmed) return null;
+            if (trimmed.startsWith("0x") && trimmed.length === 66) return trimmed;
+            return ethers.keccak256(ethers.toUtf8Bytes(trimmed));
+        }
+
+        async function connectWallet() {
+            if (!window.ethereum) {
+                alert("未检测到钱包，请安装 MetaMask。");
+                return;
+            }
+            const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+            currentAccount = accounts[0];
+            provider = new ethers.BrowserProvider(window.ethereum);
+            signer = await provider.getSigner();
+            await ensureNetwork();
+            updateWalletUi();
+            if (hasConfig()) {
+                await refreshCurrentRound();
+                await loadLeaderboard();
+            }
+        }
+
+        async function ensureNetwork() {
+            if (!provider) return;
+            const network = await provider.getNetwork();
+            const targetChainId = appConfig.chainId;
+            if (Number(network.chainId) === targetChainId) {
+                document.getElementById("networkStatus").innerText = appConfig.chainName;
+                return;
+            }
+            try {
+                await window.ethereum.request({
+                    method: "wallet_switchEthereumChain",
+                    params: [{ chainId: `0x${targetChainId.toString(16)}` }]
+                });
+            } catch (error) {
+                if (error && error.code === 4902) {
+                    await window.ethereum.request({
+                        method: "wallet_addEthereumChain",
+                        params: [{
+                            chainId: `0x${targetChainId.toString(16)}`,
+                            chainName: appConfig.chainName,
+                            rpcUrls: [appConfig.rpcUrl],
+                            nativeCurrency: { name: "OG", symbol: "OG", decimals: 18 },
+                            blockExplorerUrls: [appConfig.explorerUrl]
+                        }]
+                    });
+                } else {
+                    console.error(error);
+                }
+            }
+            document.getElementById("networkStatus").innerText = appConfig.chainName;
+        }
+
+        function updateWalletUi() {
+            const btn = document.getElementById("connectWallet");
+            if (!currentAccount) return;
+            btn.innerText = shortHash(currentAccount);
+            btn.classList.replace("bg-white/5", "bg-blue-600/10");
+            btn.classList.add("text-blue-500", "border-blue-500/20");
+        }
+
+        function hasConfig() {
+            return Boolean(appConfig.strategyNftAddress && appConfig.tradingArenaAddress);
+        }
+
+        function requireConfig() {
+            if (!appConfig.strategyNftAddress || !appConfig.tradingArenaAddress) {
+                alert("请先在【合约配置】中填写 StrategyNFT / TradingArena 地址。");
+                return false;
+            }
+            return true;
+        }
+
+        function requireStorageConfig() {
+            if (!appConfig.indexerUrl || !appConfig.flowContractAddress) {
+                alert("请先在【合约配置】中填写 Storage Indexer 与 Flow Contract。");
+                return false;
+            }
+            return true;
+        }
+
+        function getContracts() {
+            if (!provider) throw new Error("钱包未连接");
+            const signerOrProvider = signer || provider;
+            const strategyNft = new ethers.Contract(appConfig.strategyNftAddress, ABI_STRATEGY_NFT, signerOrProvider);
+            const arena = new ethers.Contract(appConfig.tradingArenaAddress, ABI_TRADING_ARENA, signerOrProvider);
+            return { strategyNft, arena };
+        }
+
+        async function registerStrategy() {
+            if (!requireConfig()) return;
+            if (!signer) {
+                alert("请先连接钱包");
+                return;
+            }
+            await ensureNetwork();
+            const name = document.getElementById("strategyName").value.trim();
+            const logic = document.getElementById("strategyLogic").value.trim();
+            if (!name || !logic) {
+                alert("请填写策略名称与策略逻辑");
+                return;
+            }
+            let parsedLogic = null;
+            try {
+                parsedLogic = JSON.parse(logic);
+            } catch (error) {
+                parsedLogic = null;
+            }
+            const normalizedLogic = parsedLogic ? JSON.stringify(parsedLogic) : logic;
+            const codeHash = ethers.keccak256(ethers.toUtf8Bytes(logic));
+            const paramsHash = ethers.keccak256(ethers.toUtf8Bytes(normalizedLogic));
+            const datasetVersionInput = document.getElementById("strategyDatasetVersion").value.trim();
+            const evalWindowInput = document.getElementById("strategyEvalWindow").value.trim();
+            if (!datasetVersionInput || !evalWindowInput) {
+                alert("请填写数据集版本与评测窗口");
+                return;
+            }
+            const storageRootInput = document.getElementById("strategyStorageRoot").value.trim();
+            const storageRoot = storageRootInput ? storageRootInput : codeHash;
+            const performancePointer = storageRoot;
+            const metadata = {
+                name,
+                description: "AI Trading Strategy",
+                attributes: [
+                    { trait_type: "Code Hash", value: codeHash },
+                    { trait_type: "Params Hash", value: paramsHash },
+                    { trait_type: "Dataset Version", value: datasetVersionInput },
+                    { trait_type: "Eval Window", value: evalWindowInput },
+                    { trait_type: "Created At", value: new Date().toISOString() }
+                ]
+            };
+            const tokenURI = `data:application/json;base64,${btoa(unescape(encodeURIComponent(JSON.stringify(metadata))))}`;
+
+            const { strategyNft } = getContracts();
+            const tx = await strategyNft.registerStrategy(
+                codeHash,
+                paramsHash,
+                datasetVersionInput,
+                evalWindowInput,
+                storageRoot,
+                performancePointer,
+                tokenURI
+            );
+            const receipt = await tx.wait();
+            const iface = new ethers.Interface(ABI_STRATEGY_NFT);
+            let tokenId = null;
+            for (const log of receipt.logs) {
+                try {
+                    const parsed = iface.parseLog(log);
+                    if (parsed && parsed.name === "StrategyRegistered") {
+                        tokenId = parsed.args.tokenId.toString();
+                        break;
+                    }
+                } catch (error) {
+                    // ignore non-matching logs
+                }
+            }
+            alert(`✅ 策略注册成功\\nToken ID: ${tokenId || "--"}\\nStorage Root: ${storageRoot}`);
+            switchView("dashboard");
+            await loadLeaderboard();
+        }
+
+        async function uploadStrategyToStorage() {
+            if (!requireStorageConfig()) return;
+            if (!signer) {
+                alert("请先连接钱包");
+                return;
+            }
+            await ensureNetwork();
+            const logic = document.getElementById("strategyLogic").value.trim();
+            if (!logic) {
+                alert("请填写策略逻辑后再上传");
+                return;
+            }
+            const statusEl = document.getElementById("uploadStrategyStatus");
+            statusEl.innerText = "上传中...";
+            try {
+                const nativeBlob = new window.Blob([logic], { type: "application/json" });
+                if (typeof ZgFile.fromBlob !== "function") {
+                    throw new Error("ZgFile.fromBlob is not available in this SDK build");
+                }
+                const file = await ZgFile.fromBlob(nativeBlob);
+                const [tree, treeErr] = await file.merkleTree();
+                if (treeErr) {
+                    throw treeErr;
+                }
+                const indexer = new Indexer(appConfig.indexerUrl);
+                const flowContract = getFlowContract(appConfig.flowContractAddress, signer);
+                await file.upload(flowContract, indexer);
+                const rootHash = tree.rootHash();
+                document.getElementById("strategyStorageRoot").value = rootHash;
+                statusEl.innerText = `OK ${shortHash(rootHash)}`;
+                if (file.close) {
+                    await file.close();
+                }
+            } catch (error) {
+                console.error(error);
+                statusEl.innerText = "上传失败";
+                alert("Storage 上传失败，请检查余额/网络/Indexer");
+            }
+        }
+
+        async function startRound() {
+            if (!requireConfig()) return;
+            if (!signer) {
+                alert("请先连接钱包");
+                return;
+            }
+            await ensureNetwork();
+            const input = document.getElementById("marketDataHash").value.trim();
+            const hash = normalizeHash(input || "demo-market-data");
+            const { arena } = getContracts();
+            const tx = await arena.startNewRound(hash);
+            await tx.wait();
+            alert(`✅ 已启动新轮次\\nMarket Hash: ${hash}`);
+            await refreshCurrentRound();
+        }
+
+        async function submitResult() {
+            if (!requireConfig()) return;
+            if (!signer) {
+                alert("请先连接钱包");
+                return;
+            }
+            await ensureNetwork();
+            const strategyId = document.getElementById("submitStrategyId").value.trim();
+            const pnl = document.getElementById("submitPnl").value.trim();
+            const totalTrades = document.getElementById("submitTotalTrades").value.trim();
+            const winningTrades = document.getElementById("submitWinningTrades").value.trim();
+            const logHashInput = document.getElementById("submitLogHash").value.trim();
+            if (!strategyId || !pnl || !totalTrades || !winningTrades || !logHashInput) {
+                alert("请填写完整的结果提交字段");
+                return;
+            }
+            const logHash = normalizeHash(logHashInput);
+            const { arena } = getContracts();
+            const tx = await arena.submitResult(
+                BigInt(strategyId),
+                BigInt(pnl),
+                BigInt(totalTrades),
+                BigInt(winningTrades),
+                logHash
+            );
+            await tx.wait();
+            alert("✅ 结果已提交上链");
+            await loadLeaderboard();
+        }
+
+        async function refreshCurrentRound() {
+            if (!hasConfig() || !provider) return;
+            const { arena } = getContracts();
+            try {
+                const round = await arena.currentRound();
+                document.getElementById("currentRound").innerText = `#${round.toString()}`;
+            } catch (error) {
+                document.getElementById("currentRound").innerText = "#--";
+            }
+        }
+
+        async function loadLeaderboard() {
+            if (!hasConfig() || !provider) return;
+            const { arena, strategyNft } = getContracts();
+            const [strategyIds, pnls] = await arena.getLeaderboard(10);
+            const body = document.getElementById("leaderboardBody");
+            body.innerHTML = "";
+            if (!strategyIds.length) {
+                body.innerHTML = "<tr><td class='px-8 py-6 text-gray-500 text-sm' colspan='5'>暂无策略数据</td></tr>";
+                return;
+            }
+            for (let i = 0; i < strategyIds.length; i += 1) {
+                const id = strategyIds[i];
+                const pnl = pnls[i];
+                const strategy = await strategyNft.getStrategy(id);
+                const rank = i + 1;
+                const pnlValue = Number(pnl);
+                const row = document.createElement("tr");
+                row.className = "hover:bg-white/5 transition-all";
+                row.innerHTML = `
+                    <td class="px-8 py-5 font-bold italic ${rank === 1 ? "text-yellow-500" : "text-gray-400"}">#${rank}</td>
+                    <td class="px-8 py-5">
+                        <div class="font-bold">Strategy #${id}</div>
+                        <div class="text-[10px] text-gray-500 mono">Creator: ${shortHash(strategy.creator)}</div>
+                    </td>
+                    <td class="px-8 py-5 text-right font-bold ${pnlValue >= 0 ? "text-emerald-400" : "text-red-400"} text-lg">${pnlValue}</td>
+                    <td class="px-8 py-5">
+                        <span class="px-3 py-1 rounded-lg bg-blue-500/10 text-blue-400 text-[10px] mono border border-blue-500/20">${shortHash(strategy.storageRoot)}</span>
+                    </td>
+                    <td class="px-8 py-5">
+                        <div class="flex items-center gap-2 text-xs text-gray-400">
+                            <div class="w-2 h-2 rounded-full bg-emerald-500"></div> 运行中
+                        </div>
+                    </td>
+                `;
+                body.appendChild(row);
+            }
+        }
+
+        async function verifyOnChain() {
+            if (!requireConfig() || !provider) return;
+            const roundId = document.getElementById("verifyRoundId").value.trim();
+            const strategyId = document.getElementById("verifyStrategyId").value.trim();
+            const hashInput = document.getElementById("verifyInput").value.trim();
+            if (!roundId || !strategyId || !hashInput) {
+                alert("请输入 Round ID、Strategy ID 与 Hash");
+                return;
+            }
+            const expectedHash = normalizeHash(hashInput);
+            const { arena } = getContracts();
+            const ok = await arena.verifyResult(BigInt(roundId), BigInt(strategyId), expectedHash);
+            document.getElementById("verifyInputHash").innerText = shortHash(expectedHash);
+            const resultEl = document.getElementById("verifyResult");
+            resultEl.classList.remove("hidden");
+            const statusEl = document.getElementById("verifyStatusText");
+            statusEl.innerHTML = ok ? "Verification Success" : "Verification Failed";
+            statusEl.classList.toggle("text-emerald-500", ok);
+            statusEl.classList.toggle("text-red-400", !ok);
+        }
+
+        document.getElementById("connectWallet").addEventListener("click", connectWallet);
+        document.getElementById("saveConfigButton").addEventListener("click", saveConfig);
+        document.getElementById("refreshLeaderboard").addEventListener("click", loadLeaderboard);
+        document.getElementById("startRoundButton").addEventListener("click", startRound);
+        document.getElementById("submitResultButton").addEventListener("click", submitResult);
+        document.getElementById("verifyButton").addEventListener("click", verifyOnChain);
+        document.getElementById("uploadStrategyButton").addEventListener("click", uploadStrategyToStorage);
+
+        function simulateMint() {
+            registerStrategy().catch((error) => {
+                console.error(error);
+                alert("注册失败，请检查钱包与合约配置");
+            });
+        }
+
+        window.switchView = switchView;
+        window.simulateMint = simulateMint;
+
+        loadConfig();
+    </script>
+</body>
+</html>
