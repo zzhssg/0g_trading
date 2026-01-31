@@ -13,6 +13,7 @@ describe("StrategyNFT", function () {
     const datasetVersion = "v1";
     const evalWindow = "2025-01-01~2025-02-01";
     const storageRoot = "root";
+    const performancePointer = "perf-root";
     const tokenURI = "ipfs://token";
 
     await expect(
@@ -22,6 +23,7 @@ describe("StrategyNFT", function () {
         datasetVersion,
         evalWindow,
         storageRoot,
+        performancePointer,
         tokenURI
       )
     )
@@ -33,7 +35,8 @@ describe("StrategyNFT", function () {
         paramsHash,
         datasetVersion,
         evalWindow,
-        storageRoot
+        storageRoot,
+        performancePointer
       );
 
     const strategy = await nft.getStrategy(1);
@@ -42,6 +45,26 @@ describe("StrategyNFT", function () {
     expect(strategy.datasetVersion).to.equal(datasetVersion);
     expect(strategy.evalWindow).to.equal(evalWindow);
     expect(strategy.storageRoot).to.equal(storageRoot);
+    expect(strategy.performancePointer).to.equal(performancePointer);
     expect(strategy.creator).to.equal(owner.address);
+  });
+
+  it("stores performancePointer", async function () {
+    const StrategyNFT = await ethers.getContractFactory("StrategyNFT");
+    const nft = await StrategyNFT.deploy();
+    await nft.waitForDeployment();
+
+    await nft.registerStrategy(
+      ethers.keccak256(ethers.toUtf8Bytes("code")),
+      ethers.keccak256(ethers.toUtf8Bytes("params")),
+      "v1",
+      "window",
+      "storage-root",
+      "perf-root",
+      "token-uri"
+    );
+
+    const strategy = await nft.getStrategy(1);
+    expect(strategy.performancePointer).to.equal("perf-root");
   });
 });

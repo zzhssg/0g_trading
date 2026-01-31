@@ -337,20 +337,15 @@
                             <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                         </div>
                         <h3 class="text-2xl font-bold mb-2">Verifiable Result Inspector</h3>
-                        <p class="text-gray-500 text-sm mb-8">输入 Hash，支持链上验证与 Storage 下载校验</p>
+                        <p class="text-gray-500 text-sm mb-8">输入 Hash，与链上记录对比验证</p>
                         
-                        <div class="flex gap-4 mb-6">
+                        <div class="flex gap-4 mb-10">
                             <input id="verifyInput" type="text" class="flex-1 bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm mono outline-none focus:border-blue-500 transition-all" placeholder="Enter Root Hash / Log Hash (0x...)">
-                            <button id="verifyButton" class="px-6 py-4 rounded-2xl bg-white text-black font-bold hover:bg-gray-200 transition-all">链上验证</button>
-                            <button id="downloadVerifyButton" class="px-6 py-4 rounded-2xl bg-white/10 border border-white/10 font-bold hover:bg-white/15 transition-all">Storage 验证</button>
+                            <button id="verifyButton" class="px-8 py-4 rounded-2xl bg-white text-black font-bold hover:bg-gray-200 transition-all">验证</button>
                         </div>
-                        <div class="flex gap-4 mb-6">
+                        <div class="flex gap-4 mb-10">
                             <input id="verifyRoundId" type="number" class="flex-1 bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm mono outline-none focus:border-blue-500 transition-all" placeholder="Round ID">
                             <input id="verifyStrategyId" type="number" class="flex-1 bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm mono outline-none focus:border-blue-500 transition-all" placeholder="Strategy ID">
-                        </div>
-                        <div class="text-left text-xs text-gray-400 mb-6">
-                            <span id="storageVerifyStatus" class="mono">Storage 校验状态：未开始</span>
-                            <pre id="downloadPreview" class="mt-3 max-h-40 overflow-auto rounded-xl bg-black/40 border border-white/5 p-4 text-[10px] text-gray-500"></pre>
                         </div>
 
                         <div id="verifyResult" class="hidden animate-pulse">
@@ -410,9 +405,9 @@
         }
 
         const ABI_STRATEGY_NFT = [
-            "event StrategyRegistered(uint256 indexed tokenId,address indexed creator,bytes32 codeHash,bytes32 paramsHash,string datasetVersion,string evalWindow,string storageRoot)",
-            "function registerStrategy(bytes32 codeHash,bytes32 paramsHash,string datasetVersion,string evalWindow,string storageRoot,string tokenURI) external returns (uint256)",
-            "function getStrategy(uint256 tokenId) external view returns (tuple(bytes32 codeHash,bytes32 paramsHash,string datasetVersion,string evalWindow,string storageRoot,uint256 createdAt,address creator,bool isActive))",
+            "event StrategyRegistered(uint256 indexed tokenId,address indexed creator,bytes32 codeHash,bytes32 paramsHash,string datasetVersion,string evalWindow,string storageRoot,string performancePointer)",
+            "function registerStrategy(bytes32 codeHash,bytes32 paramsHash,string datasetVersion,string evalWindow,string storageRoot,string performancePointer,string tokenURI) external returns (uint256)",
+            "function getStrategy(uint256 tokenId) external view returns (tuple(bytes32 codeHash,bytes32 paramsHash,string datasetVersion,string evalWindow,string storageRoot,string performancePointer,uint256 createdAt,address creator,bool isActive))",
             "function totalStrategies() external view returns (uint256)"
         ];
 
@@ -496,13 +491,6 @@
             return ethers.keccak256(ethers.toUtf8Bytes(trimmed));
         }
 
-        function parseRootHash(value) {
-            const trimmed = (value || "").trim();
-            if (!trimmed) return null;
-            const isHex = /^0x[0-9a-fA-F]{64}$/.test(trimmed);
-            return isHex ? trimmed : null;
-        }
-
         async function connectWallet() {
             if (!window.ethereum) {
                 alert("未检测到钱包，请安装 MetaMask。");
@@ -580,14 +568,6 @@
             return true;
         }
 
-        function requireIndexerConfig() {
-            if (!appConfig.indexerUrl) {
-                alert("请先在【合约配置】中填写 Storage Indexer。");
-                return false;
-            }
-            return true;
-        }
-
         function getContracts() {
             if (!provider) throw new Error("钱包未连接");
             const signerOrProvider = signer || provider;
@@ -626,6 +606,7 @@
             }
             const storageRootInput = document.getElementById("strategyStorageRoot").value.trim();
             const storageRoot = storageRootInput ? storageRootInput : codeHash;
+            const performancePointer = storageRoot;
             const metadata = {
                 name,
                 description: "AI Trading Strategy",
@@ -646,6 +627,7 @@
                 datasetVersionInput,
                 evalWindowInput,
                 storageRoot,
+                performancePointer,
                 tokenURI
             );
             const receipt = await tx.wait();
@@ -823,68 +805,6 @@
             statusEl.classList.toggle("text-red-400", !ok);
         }
 
-        function buildIndexerDownloadUrl(baseUrl, rootHash) {
-            const trimmed = (baseUrl || "").replace(/\/+$/, "");
-            return `${trimmed}/file?root=${rootHash}`;
-        }
-
-        async function downloadAndVerifyStorage() {
-            if (!requireIndexerConfig()) return;
-            const rootHash = parseRootHash(document.getElementById("verifyInput").value);
-            if (!rootHash) {
-                alert("请输入 0x 开头的 Root Hash");
-                return;
-            }
-            const statusEl = document.getElementById("storageVerifyStatus");
-            const previewEl = document.getElementById("downloadPreview");
-            statusEl.innerText = "Storage 校验状态：下载中...";
-            statusEl.classList.remove("text-emerald-400", "text-red-400");
-            previewEl.innerText = "";
-            try {
-                const url = buildIndexerDownloadUrl(appConfig.indexerUrl, rootHash);
-                const response = await fetch(url);
-                if (!response.ok) {
-                    throw new Error(`Download failed: ${response.status}`);
-                }
-                const buffer = await response.arrayBuffer();
-                const blob = new window.Blob([buffer], { type: "application/octet-stream" });
-
-                let file = null;
-                if (typeof ZgFile.fromBlob === "function") {
-                    file = await ZgFile.fromBlob(blob);
-                } else if (typeof ZgFile.fromBytes === "function") {
-                    file = await ZgFile.fromBytes(new Uint8Array(buffer));
-                } else {
-                    throw new Error("ZgFile.fromBlob/fromBytes is not available in this SDK build");
-                }
-
-                const [tree, treeErr] = await file.merkleTree();
-                if (treeErr) {
-                    throw treeErr;
-                }
-                const computedRoot = tree.rootHash();
-                const ok = computedRoot.toLowerCase() === rootHash.toLowerCase();
-                statusEl.innerText = ok
-                    ? `Storage 校验状态：通过 ${shortHash(computedRoot)}`
-                    : `Storage 校验状态：失败 ${shortHash(computedRoot)}`;
-                statusEl.classList.toggle("text-emerald-400", ok);
-                statusEl.classList.toggle("text-red-400", !ok);
-
-                const decoder = new TextDecoder("utf-8");
-                const previewText = decoder.decode(buffer.slice(0, 2000));
-                previewEl.innerText = previewText;
-
-                if (file.close) {
-                    await file.close();
-                }
-            } catch (error) {
-                console.error(error);
-                statusEl.innerText = "Storage 校验状态：失败";
-                statusEl.classList.add("text-red-400");
-                previewEl.innerText = "下载或校验失败，请检查 Indexer、Root Hash 或 SDK 支持情况。";
-            }
-        }
-
         document.getElementById("connectWallet").addEventListener("click", connectWallet);
         document.getElementById("saveConfigButton").addEventListener("click", saveConfig);
         document.getElementById("refreshLeaderboard").addEventListener("click", loadLeaderboard);
@@ -892,7 +812,6 @@
         document.getElementById("submitResultButton").addEventListener("click", submitResult);
         document.getElementById("verifyButton").addEventListener("click", verifyOnChain);
         document.getElementById("uploadStrategyButton").addEventListener("click", uploadStrategyToStorage);
-        document.getElementById("downloadVerifyButton").addEventListener("click", downloadAndVerifyStorage);
 
         function simulateMint() {
             registerStrategy().catch((error) => {

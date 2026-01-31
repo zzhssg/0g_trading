@@ -12,6 +12,7 @@ contract StrategyNFT is ERC721, ERC721URIStorage, Ownable {
         string datasetVersion;
         string evalWindow;
         string storageRoot;
+        string performancePointer;
         uint256 createdAt;
         address creator;
         bool isActive;
@@ -27,7 +28,8 @@ contract StrategyNFT is ERC721, ERC721URIStorage, Ownable {
         bytes32 paramsHash,
         string datasetVersion,
         string evalWindow,
-        string storageRoot
+        string storageRoot,
+        string performancePointer
     );
 
     constructor() ERC721("AI Trading Strategy", "AITS") Ownable(msg.sender) {}
@@ -35,13 +37,14 @@ contract StrategyNFT is ERC721, ERC721URIStorage, Ownable {
     /// @notice Register a strategy NFT with minimal on-chain fields.
     /// @dev tokenURI should point to metadata JSON including:
     ///      strategy/instrument/logic/execution/verification.
-    ///      For MVP, storageRoot may be a hash placeholder if not uploaded.
+    ///      For MVP, storageRoot/performancePointer may be hash placeholders if not uploaded.
     function registerStrategy(
         bytes32 _codeHash,
         bytes32 _paramsHash,
         string memory _datasetVersion,
         string memory _evalWindow,
         string memory _storageRoot,
+        string memory _performancePointer,
         string memory _tokenURI
     ) external returns (uint256) {
         _tokenIds += 1;
@@ -56,6 +59,7 @@ contract StrategyNFT is ERC721, ERC721URIStorage, Ownable {
             datasetVersion: _datasetVersion,
             evalWindow: _evalWindow,
             storageRoot: _storageRoot,
+            performancePointer: _performancePointer,
             createdAt: block.timestamp,
             creator: msg.sender,
             isActive: true
@@ -68,7 +72,8 @@ contract StrategyNFT is ERC721, ERC721URIStorage, Ownable {
             _paramsHash,
             _datasetVersion,
             _evalWindow,
-            _storageRoot
+            _storageRoot,
+            _performancePointer
         );
         return newTokenId;
     }
