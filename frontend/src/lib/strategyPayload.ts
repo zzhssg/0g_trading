@@ -44,6 +44,48 @@ function encodeTokenURI(metadata: StrategyRegistrationPayload["metadata"]) {
   return `data:application/json;base64,${base64}`;
 }
 
+function requireString(path: string, value: unknown) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`缺少 ${path}`);
+  }
+}
+
+function normalizeRoot(value?: string) {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function validateStrategyJson(parsedStrategy: Record<string, unknown>) {
+  const strategy = parsedStrategy.strategy as Record<string, unknown> | undefined;
+  requireString("strategy.name", strategy?.name);
+
+  const instrument = parsedStrategy.instrument as
+    | Record<string, unknown>
+    | undefined;
+  requireString("instrument.symbol", instrument?.symbol);
+  requireString("instrument.timeframe", instrument?.timeframe);
+  requireString("instrument.market", instrument?.market);
+
+  const logic = parsedStrategy.logic as Record<string, unknown> | undefined;
+  requireString("logic.type", logic?.type);
+  const rules = logic?.rules;
+  if (!Array.isArray(rules)) {
+    throw new Error("logic.rules 必须是数组");
+  }
+
+  const execution = parsedStrategy.execution as
+    | Record<string, unknown>
+    | undefined;
+  requireString("execution.position", execution?.position);
+  requireString("execution.direction", execution?.direction);
+
+  const verification = parsedStrategy.verification as
+    | Record<string, unknown>
+    | undefined;
+  requireString("verification.backtestLogHash", verification?.backtestLogHash);
+}
+
 export function buildStrategyRegistrationPayload(
   input: StrategyRegistrationInput
 ): StrategyRegistrationPayload {
@@ -65,13 +107,17 @@ export function buildStrategyRegistrationPayload(
   } catch {
     throw new Error("策略 JSON 无法解析，请检查格式。");
   }
+  validateStrategyJson(parsedStrategy);
 
   const normalizedJson = JSON.stringify(parsedStrategy);
   const codeHash = strategyCode
     ? ethers.keccak256(ethers.toUtf8Bytes(strategyCode))
     : ethers.keccak256(ethers.toUtf8Bytes(strategyJson));
   const paramsHash = ethers.keccak256(ethers.toUtf8Bytes(normalizedJson));
-  const storageRoot = strategyCodeRoot ?? providedStorageRoot ?? codeHash;
+  const storageRoot =
+    normalizeRoot(strategyCodeRoot) ??
+    normalizeRoot(providedStorageRoot) ??
+    codeHash;
   const performancePointer = providedPerformancePointer ?? "0x...";
   const verification = parsedStrategy.verification as
     | { backtestLogHash?: unknown }

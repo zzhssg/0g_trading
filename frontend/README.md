@@ -20,6 +20,20 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Frontend Environment
+
+Create or update `.env.local` in this directory:
+
+```
+NEXT_PUBLIC_STRATEGY_NFT_ADDRESS=0x...
+NEXT_PUBLIC_TRADING_ARENA_ADDRESS=0x...
+NEXT_PUBLIC_RPC_URL=https://evmrpc-testnet.0g.ai
+NEXT_PUBLIC_STORAGE_INDEXER=https://indexer-storage-testnet-turbo.0g.ai
+NEXT_PUBLIC_FLOW_CONTRACT=0x22E03a6A89B950F1c82ec5e74F8eCa321a105296
+```
+
+`NEXT_PUBLIC_STORAGE_INDEXER` and `NEXT_PUBLIC_FLOW_CONTRACT` are used by the 0G Storage upload in the Strategy Factory view.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

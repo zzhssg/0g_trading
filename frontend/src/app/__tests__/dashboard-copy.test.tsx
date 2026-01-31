@@ -59,7 +59,7 @@ describe("dashboard -> inspector hash copy", () => {
     vi.resetModules();
   });
 
-  it("copies market data hash into inspector input", async () => {
+  it("copies market data hash and opens inspector", async () => {
     const { default: Home } = await import("../page");
     render(<Home />);
 
@@ -68,7 +68,8 @@ describe("dashboard -> inspector hash copy", () => {
     });
     await userEvent.click(copyButton);
 
-    const input = screen.getByPlaceholderText(/Enter Root Hash/i);
-    expect(input).toHaveValue(MARKET_HASH);
+    const input = await screen.findByPlaceholderText(/Round ID/i);
+    expect(input).toHaveValue("1");
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(MARKET_HASH);
   });
 });

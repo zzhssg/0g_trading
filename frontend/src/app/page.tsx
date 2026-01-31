@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ethers } from "ethers";
 import { buildStrategyRegistrationPayload } from "../lib/strategyPayload";
+import { uploadStrategyJson } from "../lib/ogStorage";
 import { computePnlFromLog, hashLog } from "../lib/verify";
 
 declare global {
@@ -139,6 +140,12 @@ export default function Home() {
   const [backtestLogHashInput, setBacktestLogHashInput] = useState("");
   const [performancePointerInput, setPerformancePointerInput] = useState("");
   const [tokenURIInput, setTokenURIInput] = useState("");
+  const [storageUploadStatus, setStorageUploadStatus] = useState<
+    "idle" | "uploading" | "success" | "error"
+  >("idle");
+  const [storageUploadError, setStorageUploadError] = useState<string | null>(
+    null
+  );
   const [strategyCode, setStrategyCode] = useState(
     "function trade(data) { return 0; }"
   );
@@ -448,6 +455,28 @@ export default function Home() {
       setMintError(getErrorMessage(error, "策略注册失败"));
     } finally {
       setMintStage("idle");
+    }
+  };
+
+  const handleUploadStrategyJson = async () => {
+    if (storageUploadStatus === "uploading") return;
+    if (!strategyJson.trim()) {
+      setStorageUploadStatus("error");
+      setStorageUploadError("请填写策略 JSON 后再上传");
+      return;
+    }
+
+    setStorageUploadError(null);
+    setStorageUploadStatus("uploading");
+
+    try {
+      const signer = await ensureWallet();
+      const rootHash = await uploadStrategyJson(strategyJson, signer);
+      setStorageRootInput(rootHash);
+      setStorageUploadStatus("success");
+    } catch (error: unknown) {
+      setStorageUploadStatus("error");
+      setStorageUploadError(getErrorMessage(error, "Storage 上传失败"));
     }
   };
 
@@ -927,6 +956,30 @@ export default function Home() {
                             className="w-full bg-black/40 border border-white/10 rounded-2xl px-5 py-4 text-sm focus:border-blue-500 transition-all outline-none mono"
                             placeholder="0x... (from 0G Storage)"
                           />
+                          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <button
+                              type="button"
+                              onClick={handleUploadStrategyJson}
+                              disabled={storageUploadStatus === "uploading"}
+                              className="px-4 py-3 rounded-2xl bg-white/10 border border-white/10 text-xs font-bold hover:bg-white/15 transition-all disabled:cursor-not-allowed disabled:opacity-70"
+                            >
+                              {storageUploadStatus === "uploading"
+                                ? "上传中..."
+                                : "上传到 0G Storage"}
+                            </button>
+                            <span className="text-[10px] mono text-gray-500">
+                              {storageUploadStatus === "success"
+                                ? `OK ${shortenHash(storageRootInput)}`
+                                : storageUploadStatus === "error"
+                                  ? "上传失败"
+                                  : "未上传"}
+                            </span>
+                          </div>
+                          {storageUploadError && (
+                            <p className="text-[10px] text-red-400">
+                              {storageUploadError}
+                            </p>
+                          )}
                         </div>
                         <div>
                           <label
@@ -1141,7 +1194,7 @@ export default function Home() {
                         <div>
                           <h5 className="font-bold text-sm">0G Storage Upload</h5>
                           <p className="text-xs text-gray-500 mt-1">
-                            MVP 版本默认用 Hash 作为 Storage Root。
+                            上传策略 JSON 到 0G Storage 生成 Storage Root。
                           </p>
                         </div>
                       </div>

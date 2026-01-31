@@ -3,14 +3,22 @@ import { ethers } from "ethers";
 import { buildStrategyRegistrationPayload } from "./strategyPayload";
 
 describe("buildStrategyRegistrationPayload", () => {
+  const baseStrategy = {
+    strategy: { name: "baseline" },
+    instrument: { symbol: "BTC/USDT", timeframe: "1m", market: "perp" },
+    logic: { type: "indicator-threshold", rules: [{ if: "x", then: "y" }] },
+    execution: { position: "all-in", direction: "long+short" },
+    verification: { backtestLogHash: "0xabc" },
+  };
+
   it("uses datasetVersion/evalWindow from form input, not JSON", () => {
     const strategyJson = JSON.stringify({
+      ...baseStrategy,
       verification: {
         datasetVersion: "json-v",
         evalWindow: "json-window",
         backtestLogHash: "0xabc",
       },
-      logic: { type: "indicator-threshold" },
     });
 
     const payload = buildStrategyRegistrationPayload({
@@ -40,7 +48,8 @@ describe("buildStrategyRegistrationPayload", () => {
 
   it("derives hashes from raw and normalized JSON", () => {
     const strategyJson = JSON.stringify({
-      logic: { rules: [{ if: "rsi < 30", then: "entry_long" }] },
+      ...baseStrategy,
+      logic: { type: "indicator-threshold", rules: [{ if: "rsi < 30", then: "entry_long" }] },
     });
     const payload = buildStrategyRegistrationPayload({
       strategyName: "Hash Strategy",
@@ -72,10 +81,50 @@ describe("buildStrategyRegistrationPayload", () => {
     ).toThrow("策略 JSON 无法解析");
   });
 
+  it("throws when required fields are missing or invalid", () => {
+    const base = {
+      strategy: { name: "ok" },
+      instrument: { symbol: "BTC/USDT", timeframe: "1m", market: "perp" },
+      logic: { type: "indicator-threshold", rules: [{ if: "x", then: "y" }] },
+      execution: { position: "all-in", direction: "long+short" },
+      verification: { backtestLogHash: "0x..." },
+    };
+
+    const cases: Array<{ value: Record<string, unknown>; message: string }> = [
+      {
+        value: { ...base, strategy: {} },
+        message: "缺少 strategy.name",
+      },
+      {
+        value: { ...base, instrument: { timeframe: "1m", market: "perp" } },
+        message: "缺少 instrument.symbol",
+      },
+      {
+        value: { ...base, logic: { type: "indicator-threshold", rules: {} } },
+        message: "logic.rules 必须是数组",
+      },
+      {
+        value: { ...base, verification: {} },
+        message: "缺少 verification.backtestLogHash",
+      },
+    ];
+
+    cases.forEach((testCase) => {
+      expect(() =>
+        buildStrategyRegistrationPayload({
+          strategyName: "Bad Strategy",
+          strategyJson: JSON.stringify(testCase.value),
+          datasetVersion: "v1",
+          evalWindow: "window",
+        })
+      ).toThrow(testCase.message);
+    });
+  });
+
   it("accepts explicit storageRoot and backtestLogHash", () => {
     const payload = buildStrategyRegistrationPayload({
       strategyName: "Form Strategy",
-      strategyJson: "{\"logic\":{}}",
+      strategyJson: JSON.stringify(baseStrategy),
       datasetVersion: "v1",
       evalWindow: "window",
       storageRoot: `0x${"11".repeat(32)}`,
@@ -93,11 +142,27 @@ describe("buildStrategyRegistrationPayload", () => {
     expect(backtestAttr?.value).toBe(`0x${"22".repeat(32)}`);
   });
 
+  it("falls back to codeHash when storageRoot is blank", () => {
+    const strategyJson = JSON.stringify(baseStrategy);
+    const payload = buildStrategyRegistrationPayload({
+      strategyName: "Form Strategy",
+      strategyJson,
+      datasetVersion: "v1",
+      evalWindow: "window",
+      storageRoot: "   ",
+    });
+
+    const expectedCodeHash = ethers.keccak256(
+      ethers.toUtf8Bytes(strategyJson)
+    );
+    expect(payload.storageRoot).toBe(expectedCodeHash);
+  });
+
   it("derives codeHash from strategy code when provided", () => {
     const strategyCode = "function trade(data){ return 1; }";
     const payload = buildStrategyRegistrationPayload({
       strategyName: "Code Strategy",
-      strategyJson: "{\"logic\":{}}",
+      strategyJson: JSON.stringify(baseStrategy),
       datasetVersion: "v1",
       evalWindow: "window",
       strategyCode,
@@ -113,7 +178,7 @@ describe("buildStrategyRegistrationPayload", () => {
   it("accepts performancePointer and tokenURI", () => {
     const payload = buildStrategyRegistrationPayload({
       strategyName: "Form Strategy",
-      strategyJson: "{\"logic\":{}}",
+      strategyJson: JSON.stringify(baseStrategy),
       datasetVersion: "v1",
       evalWindow: "window",
       storageRoot: `0x${"11".repeat(32)}`,
